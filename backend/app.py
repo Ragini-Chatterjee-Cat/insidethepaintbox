@@ -16,6 +16,7 @@ load_dotenv()
 # Import our modules
 from rag import query_rag, index_documents, get_collection_stats
 from document_loader import load_all_artworks, load_about_page
+from langgraph_memory import chat_with_memory, get_conversation_history, clear_conversation
 
 
 @asynccontextmanager
@@ -78,10 +79,22 @@ class ChatMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str
-    history: list[ChatMessage] = []  # Conversation history
+    history: list[ChatMessage] = []  # Conversation history (legacy)
+
+class ChatRequestV2(BaseModel):
+    message: str
+    thread_id: str  # Persistent thread ID for memory
 
 class ChatResponse(BaseModel):
     response: str
+
+class ChatResponseV2(BaseModel):
+    response: str
+    thread_id: str
+
+class HistoryResponse(BaseModel):
+    thread_id: str
+    messages: list[ChatMessage]
 
 class IndexResponse(BaseModel):
     status: str
@@ -116,7 +129,7 @@ async def health_check():
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     """
-    Main chat endpoint
+    Legacy chat endpoint (stateless)
     Receives a question and returns an AI-generated response
     """
     if not request.message or not request.message.strip():
@@ -133,6 +146,58 @@ async def chat(request: ChatRequest):
             status_code=500,
             detail="Sorry, I encountered an error. Please try again."
         )
+
+
+@app.post("/chat/v2", response_model=ChatResponseV2)
+async def chat_v2(request: ChatRequestV2):
+    """
+    Chat endpoint with persistent memory (LangGraph)
+    Uses thread_id for conversation persistence across sessions
+    """
+    if not request.message or not request.message.strip():
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+
+    if not request.thread_id or not request.thread_id.strip():
+        raise HTTPException(status_code=400, detail="thread_id is required")
+
+    try:
+        response = chat_with_memory(request.message, request.thread_id)
+        return ChatResponseV2(response=response, thread_id=request.thread_id)
+    except Exception as e:
+        print(f"Error in chat v2 endpoint: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Sorry, I encountered an error. Please try again."
+        )
+
+
+@app.get("/chat/history/{thread_id}", response_model=HistoryResponse)
+async def get_history(thread_id: str):
+    """
+    Get conversation history for a thread
+    """
+    try:
+        history = get_conversation_history(thread_id)
+        messages = [ChatMessage(role=msg["role"], content=msg["content"]) for msg in history]
+        return HistoryResponse(thread_id=thread_id, messages=messages)
+    except Exception as e:
+        print(f"Error getting history: {e}")
+        raise HTTPException(status_code=500, detail="Error retrieving history")
+
+
+@app.delete("/chat/history/{thread_id}")
+async def delete_history(thread_id: str):
+    """
+    Clear conversation history for a thread
+    """
+    try:
+        success = clear_conversation(thread_id)
+        if success:
+            return {"status": "cleared", "thread_id": thread_id}
+        raise HTTPException(status_code=500, detail="Failed to clear history")
+    except Exception as e:
+        print(f"Error clearing history: {e}")
+        raise HTTPException(status_code=500, detail="Error clearing history")
 
 
 @app.post("/reindex", response_model=IndexResponse)

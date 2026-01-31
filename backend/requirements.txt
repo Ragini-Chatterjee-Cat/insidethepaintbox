@@ -6,3 +6,5 @@ groq==1.0.0
 beautifulsoup4==4.12.3
 python-dotenv==1.0.0
 numpy==1.26.4
+langgraph==0.2.0
+langgraph-checkpoint-sqlite==2.0.0

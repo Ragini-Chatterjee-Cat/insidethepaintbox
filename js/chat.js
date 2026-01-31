@@ -14,6 +14,24 @@ const API_URL = 'https://art-website-production.up.railway.app';
 // ============================================
 // CHAT FUNCTIONALITY
 // ============================================
+
+/**
+ * Generate or retrieve persistent thread ID for conversation memory
+ */
+function getOrCreateThreadId() {
+    let threadId = localStorage.getItem('chatThreadId');
+    if (!threadId) {
+        // Generate a unique thread ID (UUID v4)
+        threadId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+            const r = Math.random() * 16 | 0;
+            const v = c === 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
+        localStorage.setItem('chatThreadId', threadId);
+    }
+    return threadId;
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     const chatButton = document.getElementById('chatButton');
     const chatBox = document.getElementById('chatBox');
@@ -21,8 +39,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const chatBody = document.querySelector('.chat-body');
     const chatForm = document.querySelector('.chat-form');
 
-    // Store conversation history for context
-    let conversationHistory = [];
+    // Get persistent thread ID for conversation memory
+    let threadId = getOrCreateThreadId();
 
     // Replace the contact form with chat interface
     chatForm.innerHTML = `
@@ -39,6 +57,15 @@ document.addEventListener('DOMContentLoaded', function() {
             </button>
         </div>
     `;
+
+    // Add clear chat button to header
+    const chatHeader = document.querySelector('.chat-header');
+    const clearBtn = document.createElement('button');
+    clearBtn.className = 'chat-clear-btn';
+    clearBtn.innerHTML = '<i class="fa fa-refresh"></i>';
+    clearBtn.title = 'Start new conversation';
+    clearBtn.addEventListener('click', clearConversation);
+    chatHeader.insertBefore(clearBtn, chatClose);
 
     // Add custom styles for the new chat interface
     addChatStyles();
@@ -68,7 +95,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     /**
-     * Send message to the RAG backend
+     * Send message to the RAG backend with persistent memory
      */
     async function sendMessage() {
         const input = document.getElementById('userMessage');
@@ -85,15 +112,15 @@ document.addEventListener('DOMContentLoaded', function() {
         const typingIndicator = addTypingIndicator();
 
         try {
-            // Call the RAG API with conversation history
-            const response = await fetch(`${API_URL}/chat`, {
+            // Call the RAG API v2 with persistent thread ID
+            const response = await fetch(`${API_URL}/chat/v2`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
                     message: message,
-                    history: conversationHistory
+                    thread_id: threadId
                 })
             });
 
@@ -107,14 +134,7 @@ document.addEventListener('DOMContentLoaded', function() {
             typingIndicator.remove();
             addMessage(data.response, 'bot');
 
-            // Update conversation history
-            conversationHistory.push({ role: 'user', content: message });
-            conversationHistory.push({ role: 'assistant', content: data.response });
-
-            // Keep only last 12 messages (6 exchanges) to avoid token limits
-            if (conversationHistory.length > 12) {
-                conversationHistory = conversationHistory.slice(-12);
-            }
+            // Conversation history is now managed by the backend via LangGraph
 
         } catch (error) {
             console.error('Chat error:', error);
@@ -127,6 +147,29 @@ document.addEventListener('DOMContentLoaded', function() {
 
         input.disabled = false;
         input.focus();
+    }
+
+    /**
+     * Clear conversation history (start fresh)
+     */
+    async function clearConversation() {
+        try {
+            await fetch(`${API_URL}/chat/history/${threadId}`, {
+                method: 'DELETE'
+            });
+            // Generate new thread ID for fresh conversation
+            threadId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                const r = Math.random() * 16 | 0;
+                const v = c === 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+            localStorage.setItem('chatThreadId', threadId);
+            // Clear chat UI
+            chatBody.innerHTML = '';
+            addMessage("Hello! I'm here to help you explore the artworks. What would you like to know?", 'bot');
+        } catch (error) {
+            console.error('Error clearing conversation:', error);
+        }
     }
 
     /**
@@ -202,6 +245,22 @@ document.addEventListener('DOMContentLoaded', function() {
             .chat-send-btn:hover {
                 background: rgba(92, 64, 51, 0.15);
                 color: #5c4033;
+            }
+
+            /* Clear conversation button */
+            .chat-clear-btn {
+                background: transparent;
+                border: none;
+                color: #5c4033;
+                cursor: pointer;
+                font-size: 14px;
+                padding: 5px 10px;
+                opacity: 0.7;
+                transition: opacity 0.3s ease;
+            }
+
+            .chat-clear-btn:hover {
+                opacity: 1;
             }
 
             /* Typing indicator */
