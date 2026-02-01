@@ -173,12 +173,26 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     /**
+     * Convert URLs in text to clickable links
+     */
+    function linkifyText(text) {
+        // Regex to match URLs
+        const urlRegex = /(https?:\/\/[^\s]+)/g;
+        return text.replace(urlRegex, '<a href="$1" target="_blank" class="chat-link">$1</a>');
+    }
+
+    /**
      * Add a message to the chat
      */
     function addMessage(text, type) {
         const messageDiv = document.createElement('div');
         messageDiv.className = `chat-message ${type}`;
-        messageDiv.textContent = text;
+        // For bot messages, convert URLs to clickable links
+        if (type === 'bot') {
+            messageDiv.innerHTML = linkifyText(text);
+        } else {
+            messageDiv.textContent = text;
+        }
         chatBody.appendChild(messageDiv);
         chatBody.scrollTop = chatBody.scrollHeight;
         return messageDiv;

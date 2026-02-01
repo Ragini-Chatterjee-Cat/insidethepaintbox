@@ -133,6 +133,19 @@ textarea:focus {
     border-bottom-left-radius: 5px;
 }
 
+/* Chat Links */
+.chat-link {
+    color: #8B5A2B;
+    text-decoration: underline;
+    word-break: break-all;
+    transition: color 0.2s ease;
+}
+
+.chat-link:hover {
+    color: #5c4033;
+    text-decoration: underline;
+}
+
 /* Chat Form */
 .chat-form {
     padding: 20px;

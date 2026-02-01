@@ -163,7 +163,7 @@ Now write your response to the visitor. Guidelines:
 - Keep it concise (1-3 sentences) unless they asked for more detail
 - Only include information from the context - don't make things up
 - If the context doesn't have the answer, say so honestly
-- IMPORTANT: When mentioning an artwork, include its URL so the visitor can view it. Format: "You can view it here: [URL]"
+- Only include artwork URLs when the user asks to see, view, or requests a link to an artwork. Don't include links in every response.
 
 Your response:"""
 
