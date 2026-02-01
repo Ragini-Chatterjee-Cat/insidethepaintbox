@@ -54,7 +54,8 @@ def index_documents(documents: List[Dict]):
                 metadatas=[{
                     "title": doc.get("title", ""),
                     "source": doc.get("source", ""),
-                    "subtitle": doc.get("subtitle", "")
+                    "subtitle": doc.get("subtitle", ""),
+                    "url": doc.get("url", "")
                 }],
                 ids=[f"doc_{i}"]
             )
@@ -162,6 +163,7 @@ Now write your response to the visitor. Guidelines:
 - Keep it concise (1-3 sentences) unless they asked for more detail
 - Only include information from the context - don't make things up
 - If the context doesn't have the answer, say so honestly
+- IMPORTANT: When mentioning an artwork, include its URL so the visitor can view it. Format: "You can view it here: [URL]"
 
 Your response:"""
 

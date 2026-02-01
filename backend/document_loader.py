@@ -17,7 +17,28 @@ def clean_text(text):
     return text.strip()
 
 
-def load_artwork_from_html(html_path):
+def get_artwork_url(html_path, website_path):
+    """Generate the URL for an artwork page based on file path"""
+    # Convert to Path objects for easier manipulation
+    html_path = Path(html_path)
+    website_path = Path(website_path).resolve()
+
+    # Get relative path from website root
+    try:
+        relative_path = html_path.relative_to(website_path.parent)
+    except ValueError:
+        relative_path = html_path.name
+
+    # Convert to URL path (forward slashes, URL encoded)
+    url_path = str(relative_path).replace("\\", "/")
+
+    # Base URL - update this to your actual Netlify URL
+    base_url = "https://insidethepaintbox.netlify.app"
+
+    return f"{base_url}/{url_path}"
+
+
+def load_artwork_from_html(html_path, website_path="../"):
     """Extract artwork information from a single HTML file"""
     try:
         with open(html_path, 'r', encoding='utf-8') as f:
@@ -39,10 +60,14 @@ def load_artwork_from_html(html_path):
         headers = soup.find_all('h2')
         section_titles = " ".join([clean_text(h.get_text()) for h in headers])
 
-        # Combine all content
+        # Generate URL for this artwork
+        url = get_artwork_url(html_path, website_path)
+
+        # Combine all content (include URL so chatbot knows it)
         full_content = f"""
 Artwork: {title}
 {subtitle}
+URL: {url}
 
 {description}
         """.strip()
@@ -52,7 +77,8 @@ Artwork: {title}
             "subtitle": subtitle,
             "description": description,
             "content": full_content,
-            "source": str(html_path)
+            "source": str(html_path),
+            "url": url
         }
     except Exception as e:
         print(f"Error loading {html_path}: {e}")
@@ -73,16 +99,16 @@ def load_all_artworks(website_path):
     for artwork_dir in artwork_paths:
         if artwork_dir.exists():
             for html_file in artwork_dir.glob("*.html"):
-                doc = load_artwork_from_html(html_file)
+                doc = load_artwork_from_html(html_file, website_path)
                 if doc and doc["content"]:
                     documents.append(doc)
-                    print(f"Loaded: {doc['title']}")
+                    print(f"Loaded: {doc['title']} -> {doc.get('url', 'no url')}")
 
     # Also load series pages for additional context
     series_path = website_path / "pages" / "series"
     if series_path.exists():
         for html_file in series_path.glob("*.html"):
-            doc = load_artwork_from_html(html_file)
+            doc = load_artwork_from_html(html_file, website_path)
             if doc and doc["content"]:
                 documents.append(doc)
                 print(f"Loaded series: {doc['title']}")
@@ -94,7 +120,7 @@ def load_about_page(website_path):
     """Load the about page for artist information"""
     about_path = Path(website_path) / "pages" / "about.html"
     if about_path.exists():
-        doc = load_artwork_from_html(about_path)
+        doc = load_artwork_from_html(about_path, website_path)
         if doc:
             doc["title"] = "About the Artist"
             return doc
