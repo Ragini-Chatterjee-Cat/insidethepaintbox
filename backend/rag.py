@@ -8,6 +8,7 @@ from sentence_transformers import SentenceTransformer
 from groq import Groq
 import os
 from typing import List, Dict
+from document_loader import SERIES_ARTWORK_MAP
 
 # Initialize the embedding model (runs locally, free)
 print("Loading embedding model...")
@@ -55,7 +56,8 @@ def index_documents(documents: List[Dict]):
                     "title": doc.get("title", ""),
                     "source": doc.get("source", ""),
                     "subtitle": doc.get("subtitle", ""),
-                    "url": doc.get("url", "")
+                    "url": doc.get("url", ""),
+                    "series": doc.get("series", "")
                 }],
                 ids=[f"doc_{i}"]
             )
@@ -118,8 +120,17 @@ def generate_response(question: str, context_docs: List[Dict], conversation_hist
             recent = conversation_history[-6:]  # Last 3 exchanges
             history_str = "\n".join([f"{msg['role'].upper()}: {msg['content']}" for msg in recent])
 
+        # Build series reference for the LLM
+        series_ref = "\n".join(
+            f"- {name}: {', '.join(f.replace('.html', '') for f in files)}"
+            for name, files in SERIES_ARTWORK_MAP.items()
+        )
+
         # ============ STEP 1: REASONING ============
         reasoning_prompt = f"""You are analyzing a conversation with a visitor to an art portfolio website.
+
+ARTWORK SERIES REFERENCE:
+{series_ref}
 
 CONVERSATION HISTORY:
 {history_str if history_str else "(This is the first message)"}

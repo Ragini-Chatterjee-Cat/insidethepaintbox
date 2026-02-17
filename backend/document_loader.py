@@ -8,6 +8,80 @@ from pathlib import Path
 import re
 
 
+# Maps series names to the artwork filenames that belong to them.
+# Built from the links on each series page in /pages/series/.
+SERIES_ARTWORK_MAP = {
+    "Portraits": [
+        "peeping-through-the-ivy.html",
+        "krishna.html",
+        "in-memory.html",
+        "nailea-devora.html",
+        "aishwarya-rai.html",
+        "sydney-sweeney.html",
+        "neymar.html",
+        "harry-styles.html",
+        "Byun.html",
+    ],
+    "Animal Portraits": [
+        "lucky-panda.html",
+        "tiger-cub.html",
+        "an-imp-puppy.html",
+        "just-chilling.html",
+        "rawr.html",
+        "hippo.html",
+    ],
+    "Mythical": [
+        "R.html",
+        "myth.html",
+        "athena.html",
+        "Draconic.html",
+        "from-the-ashes.html",
+        "head-in-the-clouds.html",
+        "icarus.html",
+    ],
+    "Thoughts": [
+        "whine.html",
+        "hurt.html",
+        "Trapped.html",
+        "Voices.html",
+        "Flowers.html",
+        "behind-the-tiger.html",
+    ],
+    "Camera Series": [
+        "camera-series.html",
+    ],
+    "Diary Entries": [
+        "coffee.html",
+        "chocolate.html",
+        "strawberries.html",
+        "dreaming.html",
+        "pawprints.html",
+    ],
+    "Fanart": [
+        "only-murders.html",
+        "anora.html",
+        "fellow-travellers.html",
+        "normal-people.html",
+    ],
+    "Cards": [
+        "congratulations.html",
+        "happy-birthday.html",
+    ],
+}
+
+# Build reverse lookup: artwork filename -> series name
+_ARTWORK_TO_SERIES = {}
+for series_name, artworks in SERIES_ARTWORK_MAP.items():
+    for artwork_file in artworks:
+        _ARTWORK_TO_SERIES[artwork_file.lower()] = series_name
+
+
+def get_artwork_series(html_path):
+    """Look up which series an artwork belongs to, based on its filename."""
+    filename = Path(html_path).name.lower()
+    return _ARTWORK_TO_SERIES.get(filename, "")
+
+
 def clean_text(text):
     """Clean extracted text by removing extra whitespace"""
     if not text:
@@ -63,10 +137,14 @@ def load_artwork_from_html(html_path, website_path="../"):
         # Generate URL for this artwork
         url = get_artwork_url(html_path, website_path)
 
+        # Look up series membership
+        series = get_artwork_series(html_path)
+        series_line = f"\nSeries: {series}" if series else ""
+
         # Combine all content (include URL so chatbot knows it)
         full_content = f"""
 Artwork: {title}
-{subtitle}
+{subtitle}{series_line}
 URL: {url}
 
 {description}
@@ -76,6 +154,7 @@ URL: {url}
             "title": title,
             "subtitle": subtitle,
             "description": description,
+            "series": series,
             "content": full_content,
             "source": str(html_path),
             "url": url
