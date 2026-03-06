@@ -48,7 +48,8 @@ def search_artworks(query: str) -> str:
     """
     Search the artwork collection using semantic similarity.
     Use this when a visitor asks about specific themes, styles,
-    subjects, or artwork descriptions.
+    subjects, or artwork descriptions — NOT when they name a specific
+    artwork title or a series name.
     Returns matching artworks with titles, series, descriptions, and URLs.
 
     Args:
@@ -103,8 +104,10 @@ def search_artworks(query: str) -> str:
 def filter_by_series(series: str) -> str:
     """
     List all artworks that belong to a specific series.
-    Use this when a visitor asks to browse a particular series,
-    or asks 'what series do you have?' or 'show me all [series name]'.
+    Use this when a visitor names a series directly — e.g. 'Diary Entries',
+    'Mythical', 'Portraits', 'Fanart', 'Cards', 'Thoughts', 'Camera Series',
+    'Animal Portraits'. Also use when they ask 'what series do you have?'
+    or 'show me all [series name]'. Do NOT use get_artwork_details for series names.
 
     Valid series: Portraits, Animal Portraits, Mythical, Thoughts,
     Camera Series, Diary Entries, Fanart, Cards.
@@ -161,12 +164,14 @@ def filter_by_series(series: str) -> str:
 @tool
 def get_artwork_details(artwork_name: str) -> str:
     """
-    Get full details about a specific named artwork.
-    Use this when a visitor asks about a particular piece by name,
+    Get full details about a specific individual artwork by its title.
+    Use this ONLY when a visitor asks about a particular piece by name,
     e.g. 'tell me about Voices' or 'what is Icarus about?'
+    Do NOT use this for series names like 'Diary Entries' or 'Mythical' —
+    use filter_by_series for those instead.
 
     Args:
-        artwork_name: The name of the artwork, e.g. 'Voices' or 'Icarus'
+        artwork_name: The title of a specific artwork, e.g. 'Voices' or 'Icarus'
     """
     try:
         query_embedding = embedding_model.encode(artwork_name).tolist()

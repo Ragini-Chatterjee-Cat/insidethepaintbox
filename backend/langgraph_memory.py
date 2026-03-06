@@ -163,17 +163,23 @@ def react_node(state: AgentState) -> dict:
     new_messages = []
 
     # ReAct loop — max 5 iterations to prevent runaway loops
-    for _ in range(5):
-        response = llm_with_tools.invoke(messages + new_messages)
-        new_messages.append(response)
+    try:
+        for _ in range(5):
+            response = llm_with_tools.invoke(messages + new_messages)
+            new_messages.append(response)
 
-        # If no tool calls, we have the final answer
-        if not getattr(response, "tool_calls", None):
-            break
+            # If no tool calls, we have the final answer
+            if not getattr(response, "tool_calls", None):
+                break
 
-        # Execute each tool call
-        tool_results = tool_node.invoke({"messages": messages + new_messages})
-        new_messages.extend(tool_results["messages"])
+            # Execute each tool call
+            tool_results = tool_node.invoke({"messages": messages + new_messages})
+            new_messages.extend(tool_results["messages"])
+
+    except Exception as e:
+        print(f"Error in react_node loop: {e}")
+        fallback = AIMessage(content="I'm sorry, I had trouble looking that up. Could you rephrase your question?")
+        new_messages.append(fallback)
 
     return {"messages": new_messages}
 
