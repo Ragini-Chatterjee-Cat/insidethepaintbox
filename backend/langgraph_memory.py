@@ -224,12 +224,14 @@ Gather these naturally, one question at a time:
 3. Occasion or purpose — gift, personal keepsake, special event, etc.
 4. Style preferences — or whether they'd like to browse Ragini's existing series for reference
 5. Timeline — any deadline, or is it flexible?
+6. Contact details — their email address or Instagram handle so Ragini can follow up personally
 
 Conversation so far:
 {history}
 
-If you have collected at minimum type + subject + occasion, respond with EXACTLY this format and nothing else:
-COMPLETE: <a warm 2-3 sentence summary of all the details collected>
+IMPORTANT: You MUST collect contact details (email or Instagram handle) before filing the request.
+If you have collected type + subject + occasion + contact details, respond with EXACTLY this format and nothing else:
+COMPLETE: <a warm 2-3 sentence summary of all the details collected, ending with their contact info>
 
 Otherwise ask ONE friendly follow-up question to get the most important missing detail. One question at a time."""
 
