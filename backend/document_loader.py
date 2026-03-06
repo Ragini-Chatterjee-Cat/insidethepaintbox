@@ -93,13 +93,13 @@ def clean_text(text):
 
 def get_artwork_url(html_path, website_path):
     """Generate the URL for an artwork page based on file path"""
-    # Convert to Path objects for easier manipulation
-    html_path = Path(html_path)
+    # Resolve both paths to absolute so relative_to works reliably
+    html_path = Path(html_path).resolve()
     website_path = Path(website_path).resolve()
 
     # Get relative path from website root
     try:
-        relative_path = html_path.relative_to(website_path.parent)
+        relative_path = html_path.relative_to(website_path)
     except ValueError:
         relative_path = html_path.name
 
