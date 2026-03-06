@@ -11,6 +11,19 @@ from document_loader import SERIES_ARTWORK_MAP
 # the embedding model and ChromaDB client.
 from rag import collection, embedding_model
 
+BASE_URL = "https://insidethepaintbox.netlify.app"
+
+SERIES_URLS = {
+    "Portraits":        f"{BASE_URL}/pages/series/Portraits.html",
+    "Animal Portraits": f"{BASE_URL}/pages/series/portraits-animals.html",
+    "Mythical":         f"{BASE_URL}/pages/series/Mythical.html",
+    "Thoughts":         f"{BASE_URL}/pages/series/Thoughts.html",
+    "Camera Series":    f"{BASE_URL}/pages/series/Cam.html",
+    "Diary Entries":    f"{BASE_URL}/pages/series/diary-entries.html",
+    "Fanart":           f"{BASE_URL}/pages/series/Fanart.html",
+    "Cards":            f"{BASE_URL}/pages/series/Cards.html",
+}
+
 COMMISSION_INFO = """
 Ragini Chatterjee accepts commissions for custom artwork.
 
@@ -120,9 +133,17 @@ def filter_by_series(series: str) -> str:
             # Fall back to static map
             filenames = SERIES_ARTWORK_MAP[matched_series]
             titles = [f.replace(".html", "").replace("-", " ").title() for f in filenames]
-            return f"Artworks in '{matched_series}':\n" + "\n".join(f"- {t}" for t in titles)
+            series_url = SERIES_URLS.get(matched_series, "")
+            header = f"Artworks in '{matched_series}':"
+            if series_url:
+                header += f"\nSeries page: {series_url}"
+            return header + "\n" + "\n".join(f"- {t}" for t in titles)
 
-        lines = [f"Artworks in the '{matched_series}' series:\n"]
+        series_url = SERIES_URLS.get(matched_series, "")
+        series_header = f"Artworks in the '{matched_series}' series:"
+        if series_url:
+            series_header += f"\nSeries page: {series_url}"
+        lines = [series_header + "\n"]
         for meta in results["metadatas"]:
             title = meta.get("title", "Unknown")
             url = meta.get("url", "")
