@@ -3,11 +3,15 @@ Inside the Paintbox - RAG Chatbot API
 FastAPI backend for the art website chatbot
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 import os
+import json
+import secrets
+from datetime import datetime
+from pathlib import Path
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -16,7 +20,7 @@ load_dotenv()
 # Import our modules
 from rag import query_rag, index_documents, get_collection_stats
 from document_loader import load_all_artworks, load_about_page
-from langgraph_memory import chat_with_memory, get_conversation_history, clear_conversation
+from langgraph_memory import chat_with_memory, get_conversation_history, clear_conversation, PREFS_DIR
 
 
 @asynccontextmanager
@@ -223,6 +227,69 @@ async def reindex_documents():
 async def get_stats():
     """Get statistics about the indexed documents"""
     return get_collection_stats()
+
+
+# ---------------------------------------------------------------------------
+# Admin helpers
+# ---------------------------------------------------------------------------
+
+ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")
+
+def _check_admin(request: Request):
+    auth = request.headers.get("Authorization", "")
+    if not ADMIN_TOKEN or not auth.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    token = auth[7:]
+    if not secrets.compare_digest(token, ADMIN_TOKEN):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+@app.get("/admin/pending")
+async def get_pending_commissions(request: Request):
+    """Return all unreviewed commission requests (admin only)."""
+    _check_admin(request)
+    commissions = []
+    for f in sorted(PREFS_DIR.glob("*_commission.json")):
+        try:
+            data = json.loads(f.read_text())
+            # Only show ones that haven't been replied to yet
+            reply_file = PREFS_DIR / f"{data['thread_id']}_reply.json"
+            if not reply_file.exists():
+                commissions.append(data)
+        except Exception:
+            continue
+    return {"commissions": commissions}
+
+
+@app.post("/admin/respond/{thread_id}")
+async def respond_to_commission(thread_id: str, request: Request):
+    """Send Ragini's personal reply back into the visitor's chat thread (admin only)."""
+    _check_admin(request)
+    body = await request.json()
+    message = body.get("message", "").strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="message is required")
+
+    reply_file = PREFS_DIR / f"{thread_id}_reply.json"
+    reply_file.write_text(json.dumps({
+        "thread_id": thread_id,
+        "message": message,
+        "timestamp": datetime.utcnow().isoformat(),
+    }))
+    return {"status": "sent", "thread_id": thread_id}
+
+
+@app.get("/chat/updates/{thread_id}")
+async def poll_for_reply(thread_id: str):
+    """Visitor polls this to check whether Ragini has replied to their commission."""
+    reply_file = PREFS_DIR / f"{thread_id}_reply.json"
+    if reply_file.exists():
+        try:
+            data = json.loads(reply_file.read_text())
+            return {"has_reply": True, "message": data["message"]}
+        except Exception:
+            pass
+    return {"has_reply": False}
 
 
 # Run with: uvicorn app:app --reload --port 8000

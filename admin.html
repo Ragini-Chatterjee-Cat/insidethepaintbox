@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Commission Inbox — Inside the Paintbox</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Georgia', serif;
+            background: #fdf8f4;
+            color: #3a2a1e;
+            min-height: 100vh;
+        }
+
+        /* ---- Login screen ---- */
+        #login-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            gap: 16px;
+        }
+
+        #login-screen h1 {
+            font-size: 1.6rem;
+            color: #5c4033;
+            letter-spacing: 0.05em;
+        }
+
+        #login-screen input {
+            padding: 10px 16px;
+            border: 1px solid #c9a98a;
+            border-radius: 6px;
+            font-size: 1rem;
+            width: 280px;
+            background: #fff;
+        }
+
+        #login-screen button {
+            padding: 10px 28px;
+            background: #5c4033;
+            color: #fdf8f4;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            cursor: pointer;
+            letter-spacing: 0.04em;
+        }
+
+        #login-screen button:hover { background: #3a2a1e; }
+
+        #login-error {
+            color: #b94a3c;
+            font-size: 0.9rem;
+            display: none;
+        }
+
+        /* ---- Main panel ---- */
+        #panel { display: none; }
+
+        header {
+            background: #5c4033;
+            color: #fdf8f4;
+            padding: 18px 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        header h1 { font-size: 1.3rem; letter-spacing: 0.06em; }
+
+        #refresh-btn {
+            background: transparent;
+            border: 1px solid #fdf8f4;
+            color: #fdf8f4;
+            padding: 6px 14px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+
+        #refresh-btn:hover { background: rgba(255,255,255,0.15); }
+
+        main { max-width: 860px; margin: 40px auto; padding: 0 24px; }
+
+        #status-bar {
+            font-size: 0.85rem;
+            color: #7a5c4a;
+            margin-bottom: 24px;
+        }
+
+        /* ---- Commission cards ---- */
+        .commission-card {
+            background: #fff;
+            border: 1px solid #e0cfc4;
+            border-radius: 10px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 2px 8px rgba(92,64,51,0.07);
+        }
+
+        .commission-card .meta {
+            font-size: 0.78rem;
+            color: #9a7a68;
+            margin-bottom: 12px;
+        }
+
+        .commission-card .summary {
+            font-size: 1rem;
+            line-height: 1.7;
+            margin-bottom: 20px;
+            white-space: pre-wrap;
+        }
+
+        .commission-card textarea {
+            width: 100%;
+            min-height: 110px;
+            padding: 12px;
+            border: 1px solid #c9a98a;
+            border-radius: 6px;
+            font-family: 'Georgia', serif;
+            font-size: 0.95rem;
+            resize: vertical;
+            background: #fdf8f4;
+            color: #3a2a1e;
+        }
+
+        .commission-card .send-row {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-top: 12px;
+        }
+
+        .commission-card .send-btn {
+            padding: 9px 24px;
+            background: #5c4033;
+            color: #fdf8f4;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            cursor: pointer;
+            letter-spacing: 0.03em;
+        }
+
+        .commission-card .send-btn:hover { background: #3a2a1e; }
+        .commission-card .send-btn:disabled { opacity: 0.5; cursor: default; }
+
+        .send-status {
+            font-size: 0.85rem;
+            color: #4a7a4a;
+        }
+
+        #empty-state {
+            text-align: center;
+            color: #9a7a68;
+            padding: 60px 0;
+            font-size: 1rem;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Login -->
+<div id="login-screen">
+    <h1>Commission Inbox</h1>
+    <input type="password" id="token-input" placeholder="Admin password" />
+    <button onclick="login()">Enter</button>
+    <p id="login-error">Incorrect password.</p>
+</div>
+
+<!-- Panel -->
+<div id="panel">
+    <header>
+        <h1>Commission Inbox — Inside the Paintbox</h1>
+        <button id="refresh-btn" onclick="loadCommissions()">Refresh</button>
+    </header>
+    <main>
+        <p id="status-bar">Loading...</p>
+        <div id="commissions-list"></div>
+        <p id="empty-state">No pending commissions right now.</p>
+    </main>
+</div>
+
+<script>
+    const API_URL = 'https://art-website-production.up.railway.app';
+    let adminToken = '';
+    let pollHandle = null;
+
+    function login() {
+        const input = document.getElementById('token-input').value.trim();
+        if (!input) return;
+        adminToken = input;
+        loadCommissions();
+    }
+
+    document.getElementById('token-input').addEventListener('keydown', e => {
+        if (e.key === 'Enter') login();
+    });
+
+    async function loadCommissions() {
+        document.getElementById('status-bar').textContent = 'Loading...';
+        try {
+            const res = await fetch(`${API_URL}/admin/pending`, {
+                headers: { 'Authorization': `Bearer ${adminToken}` }
+            });
+
+            if (res.status === 401) {
+                document.getElementById('login-error').style.display = 'block';
+                return;
+            }
+
+            // Successful auth — show panel
+            document.getElementById('login-screen').style.display = 'none';
+            document.getElementById('panel').style.display = 'block';
+            document.getElementById('login-error').style.display = 'none';
+
+            const data = await res.json();
+            const list = data.commissions || [];
+
+            const container = document.getElementById('commissions-list');
+            const emptyState = document.getElementById('empty-state');
+            container.innerHTML = '';
+
+            if (list.length === 0) {
+                emptyState.style.display = 'block';
+                document.getElementById('status-bar').textContent = 'No pending commissions.';
+            } else {
+                emptyState.style.display = 'none';
+                document.getElementById('status-bar').textContent =
+                    `${list.length} pending commission${list.length > 1 ? 's' : ''} — auto-refreshes every 30s`;
+
+                list.forEach(item => {
+                    container.appendChild(buildCard(item));
+                });
+            }
+
+            // Auto-refresh every 30s
+            clearInterval(pollHandle);
+            pollHandle = setInterval(loadCommissions, 30000);
+
+        } catch (err) {
+            document.getElementById('status-bar').textContent = 'Could not connect to server.';
+        }
+    }
+
+    function buildCard(item) {
+        const card = document.createElement('div');
+        card.className = 'commission-card';
+        card.id = `card-${item.thread_id}`;
+
+        const ts = item.timestamp
+            ? new Date(item.timestamp).toLocaleString()
+            : 'Unknown time';
+
+        card.innerHTML = `
+            <div class="meta">Thread: ${item.thread_id} &nbsp;|&nbsp; Received: ${ts}</div>
+            <div class="summary">${escapeHtml(item.summary)}</div>
+            <textarea id="reply-${item.thread_id}"
+                placeholder="Write your personal reply to the visitor here..."></textarea>
+            <div class="send-row">
+                <button class="send-btn" onclick="sendReply('${item.thread_id}')">
+                    Send Reply
+                </button>
+                <span class="send-status" id="status-${item.thread_id}"></span>
+            </div>
+        `;
+        return card;
+    }
+
+    async function sendReply(threadId) {
+        const textarea = document.getElementById(`reply-${threadId}`);
+        const message = textarea.value.trim();
+        if (!message) {
+            alert('Please write a reply before sending.');
+            return;
+        }
+
+        const btn = document.querySelector(`#card-${threadId} .send-btn`);
+        const status = document.getElementById(`status-${threadId}`);
+        btn.disabled = true;
+        status.textContent = 'Sending...';
+
+        try {
+            const res = await fetch(`${API_URL}/admin/respond/${threadId}`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${adminToken}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ message }),
+            });
+
+            if (res.ok) {
+                status.textContent = 'Sent! The visitor will see your reply in their chat.';
+                textarea.disabled = true;
+            } else {
+                status.textContent = 'Failed to send. Try again.';
+                btn.disabled = false;
+            }
+        } catch (_) {
+            status.textContent = 'Network error. Try again.';
+            btn.disabled = false;
+        }
+    }
+
+    function escapeHtml(text) {
+        return text
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+</script>
+</body>
+</html>

@@ -12,8 +12,9 @@ Public interface is unchanged:
 import json
 import os
 import sqlite3
+from datetime import datetime
 from pathlib import Path
-from typing import Annotated, List, TypedDict
+from typing import Annotated, List, Optional, TypedDict
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_groq import ChatGroq
@@ -43,9 +44,10 @@ memory_saver = SqliteSaver(sqlite_conn)
 
 class AgentState(TypedDict):
     messages: Annotated[list, add_messages]   # full message history
-    intent: str                                # "artwork" | "general"
+    intent: str                                # "artwork" | "general" | "commission"
     user_prefs: dict                           # liked series, artworks, tone
     thread_id: str
+    commission_data: dict                      # tracks commission intake state
 
 
 # ---------------------------------------------------------------------------
@@ -111,24 +113,31 @@ def load_preferences(state: AgentState) -> dict:
 # ---------------------------------------------------------------------------
 
 _CLASSIFY_SYSTEM = """You are a classifier. Given a user message, output exactly one word:
-- "artwork" — if the user asks about specific artworks, series, commissions, recommendations, or anything art-related
-- "general" — if the user is making small talk, greeting, or asking something unrelated to the art collection
+- "commission" — if the user asks about commissioning, ordering, pricing, or requesting custom artwork to be made
+- "artwork" — if the user asks about specific artworks, series, recommendations, or anything art-related
+- "general" — if the user is making small talk, greeting, or asking something unrelated
 
 Respond with only the single word, nothing else."""
 
 def classify(state: AgentState) -> dict:
     """Classify the user's intent to route to the right node."""
+    # If commission intake is already in progress, continue it regardless of message content
+    if state.get("commission_data", {}).get("in_progress"):
+        return {"intent": "commission"}
+
     messages = state["messages"]
     last_user = next(
         (m.content for m in reversed(messages) if isinstance(m, HumanMessage)), ""
     )
 
-    llm = _llm(max_tokens=5)
+    llm = _llm(max_tokens=10)
     result = llm.invoke([
         SystemMessage(content=_CLASSIFY_SYSTEM),
         HumanMessage(content=last_user),
     ])
     intent = result.content.strip().lower()
+    if "commission" in intent:
+        return {"intent": "commission"}
     if "artwork" in intent:
         return {"intent": "artwork"}
     return {"intent": "general"}
@@ -201,6 +210,87 @@ def general_chat(state: AgentState) -> dict:
     llm = _llm(max_tokens=200)
     response = llm.invoke(messages)
     return {"messages": [response]}
+
+
+# ---------------------------------------------------------------------------
+# Node: commission_intake
+# ---------------------------------------------------------------------------
+
+_COMMISSION_INTAKE_SYSTEM = """You are warmly collecting commission details for artist Ragini Chatterjee.
+
+Gather these naturally, one question at a time:
+1. Type of piece — portrait of a person, pet portrait, custom illustration, or greeting card
+2. Subject — who or what the piece is of
+3. Occasion or purpose — gift, personal keepsake, special event, etc.
+4. Style preferences — or whether they'd like to browse Ragini's existing series for reference
+5. Timeline — any deadline, or is it flexible?
+
+Conversation so far:
+{history}
+
+If you have collected at minimum type + subject + occasion, respond with EXACTLY this format and nothing else:
+COMPLETE: <a warm 2-3 sentence summary of all the details collected>
+
+Otherwise ask ONE friendly follow-up question to get the most important missing detail. One question at a time."""
+
+
+def commission_intake(state: AgentState) -> dict:
+    """Collect commission details over multiple turns, then notify Ragini."""
+    messages = state["messages"]
+    commission_data = state.get("commission_data") or {}
+    thread_id = state.get("thread_id", "unknown")
+
+    # Build conversation history for the LLM
+    recent = messages[-8:]
+    history = "\n".join(
+        f"{'Visitor' if isinstance(m, HumanMessage) else 'Assistant'}: {m.content}"
+        for m in recent
+        if isinstance(m, (HumanMessage, AIMessage)) and m.content
+    )
+
+    llm = _llm(max_tokens=300)
+    result = llm.invoke([
+        SystemMessage(content=_COMMISSION_INTAKE_SYSTEM.format(history=history))
+    ])
+    text = result.content.strip()
+
+    if text.upper().startswith("COMPLETE:"):
+        summary = text[9:].strip()
+
+        # Write a file so the admin panel can see this commission
+        commission_file = PREFS_DIR / f"{thread_id}_commission.json"
+        try:
+            commission_file.write_text(json.dumps({
+                "thread_id": thread_id,
+                "summary": summary,
+                "timestamp": datetime.utcnow().isoformat(),
+            }))
+        except Exception as e:
+            print(f"Warning: could not write commission file: {e}")
+
+        confirmation = AIMessage(content=(
+            "Thank you so much for sharing those details! I've passed everything on to Ragini — "
+            "she'll be in touch personally via Instagram (@ragini_chatterjee) or email "
+            "(inthepaintbox@gmail.com) within a few days."
+        ))
+        return {
+            "messages": [confirmation],
+            "commission_data": {
+                "in_progress": False,
+                "awaiting_review": True,
+                "summary": summary,
+            },
+        }
+
+    # Still collecting — ask the next question
+    return {
+        "messages": [AIMessage(content=text)],
+        "commission_data": {
+            "in_progress": True,
+            "awaiting_review": False,
+            "summary": commission_data.get("summary", ""),
+        },
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -277,7 +367,12 @@ def save_preferences(state: AgentState) -> dict:
 # ---------------------------------------------------------------------------
 
 def route_intent(state: AgentState) -> str:
-    return "react_node" if state.get("intent") == "artwork" else "general_chat"
+    intent = state.get("intent", "general")
+    if intent == "commission":
+        return "commission_intake"
+    if intent == "artwork":
+        return "react_node"
+    return "general_chat"
 
 
 # ---------------------------------------------------------------------------
@@ -291,6 +386,7 @@ def _build_graph():
     graph.add_node("classify", classify)
     graph.add_node("react_node", react_node)
     graph.add_node("general_chat", general_chat)
+    graph.add_node("commission_intake", commission_intake)
     graph.add_node("extract_preferences", extract_preferences)
     graph.add_node("save_preferences", save_preferences)
 
@@ -299,9 +395,11 @@ def _build_graph():
     graph.add_conditional_edges("classify", route_intent, {
         "react_node": "react_node",
         "general_chat": "general_chat",
+        "commission_intake": "commission_intake",
     })
     graph.add_edge("react_node", "extract_preferences")
     graph.add_edge("general_chat", "extract_preferences")
+    graph.add_edge("commission_intake", "extract_preferences")
     graph.add_edge("extract_preferences", "save_preferences")
     graph.add_edge("save_preferences", END)
 
