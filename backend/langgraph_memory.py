@@ -395,8 +395,10 @@ def _build_graph():
 
     postgres_uri = os.environ.get("POSTGRES_URI")
     if postgres_uri:
+        import psycopg
         from langgraph.checkpoint.postgres import PostgresSaver
-        checkpointer = PostgresSaver.from_conn_string(postgres_uri)
+        conn = psycopg.connect(postgres_uri)
+        checkpointer = PostgresSaver(conn)
         checkpointer.setup()
     else:
         checkpointer = None
