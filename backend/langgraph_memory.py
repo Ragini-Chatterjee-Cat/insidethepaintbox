@@ -11,6 +11,7 @@ Public interface is unchanged:
 
 import json
 import os
+import sqlite3
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, List, Optional, TypedDict
@@ -395,7 +396,8 @@ def _build_graph():
     graph.add_edge("save_preferences",    END)
 
     db_path = os.environ.get("MEMORY_DB_PATH", "./conversation_memory.db")
-    checkpointer = SqliteSaver.from_conn_string(db_path)
+    conn = sqlite3.connect(db_path, check_same_thread=False)
+    checkpointer = SqliteSaver(conn)
     return graph.compile(checkpointer=checkpointer)
 
 
