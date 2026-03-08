@@ -134,16 +134,21 @@ textarea:focus {
 }
 
 /* Chat Links */
-.chat-link {
-    color: #8B5A2B;
-    text-decoration: underline;
-    word-break: break-all;
-    transition: color 0.2s ease;
+.chat-link-btn {
+    display: inline-block;
+    margin-top: 6px;
+    padding: 6px 14px;
+    background-color: #8B5A2B;
+    color: #fff;
+    border-radius: 20px;
+    text-decoration: none;
+    font-size: 0.85em;
+    transition: background-color 0.2s ease;
 }
 
-.chat-link:hover {
-    color: #5c4033;
-    text-decoration: underline;
+.chat-link-btn:hover {
+    background-color: #5c4033;
+    text-decoration: none;
 }
 
 /* Chat Form */

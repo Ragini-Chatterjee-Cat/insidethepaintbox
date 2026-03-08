@@ -183,7 +183,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function linkifyText(text) {
         // Regex to match URLs
         const urlRegex = /(https?:\/\/[^\s]+)/g;
-        return text.replace(urlRegex, '<a href="$1" target="_blank" class="chat-link">$1</a>');
+        return text.replace(urlRegex, '<a href="$1" target="_blank" class="chat-link-btn">View Link</a>');
     }
 
     /**
