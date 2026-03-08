@@ -13,6 +13,7 @@ venv/
 # ChromaDB local storage
 chroma_db/
 *.sqlite3
+*.db
 
 # IDE
 .vscode/

@@ -17,6 +17,7 @@ from typing import Annotated, List, Optional, TypedDict
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_groq import ChatGroq
+from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
@@ -399,7 +400,9 @@ def _build_graph():
     graph.add_edge("extract_preferences", "save_preferences")
     graph.add_edge("save_preferences", END)
 
-    return graph.compile()
+    db_path = os.environ.get("MEMORY_DB_PATH", "./conversation_memory.db")
+    checkpointer = SqliteSaver.from_conn_string(db_path)
+    return graph.compile(checkpointer=checkpointer)
 
 
 compiled_graph = _build_graph()
