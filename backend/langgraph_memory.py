@@ -11,14 +11,12 @@ Public interface is unchanged:
 
 import json
 import os
-import sqlite3
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, List, Optional, TypedDict
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_groq import ChatGroq
-from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
@@ -30,12 +28,8 @@ from tools import ARTWORK_TOOLS
 # Directories & persistence
 # ---------------------------------------------------------------------------
 
-DB_PATH = os.environ.get("MEMORY_DB_PATH", "./conversation_memory.db")
 PREFS_DIR = Path(os.environ.get("PREFS_DIR", "./user_prefs"))
 PREFS_DIR.mkdir(parents=True, exist_ok=True)
-
-sqlite_conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-memory_saver = SqliteSaver(sqlite_conn)
 
 
 # ---------------------------------------------------------------------------
@@ -405,7 +399,7 @@ def _build_graph():
     graph.add_edge("extract_preferences", "save_preferences")
     graph.add_edge("save_preferences", END)
 
-    return graph.compile(checkpointer=memory_saver)
+    return graph.compile()
 
 
 compiled_graph = _build_graph()
@@ -476,24 +470,7 @@ def clear_conversation(thread_id: str) -> bool:
     Returns:
         True if successful, False otherwise
     """
-    try:
-        # Try the modern API first
-        memory_saver.delete_thread(thread_id)
-    except AttributeError:
-        # Fallback: manual SQL delete
-        try:
-            cursor = sqlite_conn.cursor()
-            cursor.execute("DELETE FROM checkpoints WHERE thread_id = ?", (thread_id,))
-            cursor.execute("DELETE FROM writes WHERE thread_id = ?", (thread_id,))
-            sqlite_conn.commit()
-        except Exception as e:
-            print(f"Error clearing conversation: {e}")
-            return False
-    except Exception as e:
-        print(f"Error clearing conversation: {e}")
-        return False
-
-    # Also clear preference file
+    # Clear preference file
     prefs_file = PREFS_DIR / f"{thread_id}.json"
     if prefs_file.exists():
         try:
