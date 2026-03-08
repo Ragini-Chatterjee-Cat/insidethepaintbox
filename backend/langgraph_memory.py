@@ -393,7 +393,15 @@ def _build_graph():
     graph.add_edge("extract_preferences", "save_preferences")
     graph.add_edge("save_preferences",    END)
 
-    return graph.compile()
+    postgres_uri = os.environ.get("POSTGRES_URI")
+    if postgres_uri:
+        from langgraph.checkpoint.postgres import PostgresSaver
+        checkpointer = PostgresSaver.from_conn_string(postgres_uri)
+        checkpointer.setup()
+    else:
+        checkpointer = None
+
+    return graph.compile(checkpointer=checkpointer)
 
 
 compiled_graph = _build_graph()
