@@ -46,20 +46,8 @@ class AgentState(TypedDict):
 
 
 # ---------------------------------------------------------------------------
-# LLM helpers
+# Prompts
 # ---------------------------------------------------------------------------
-
-def _llm(max_tokens: int = 512) -> ChatGroq:
-    api_key = os.environ.get("GROQ_API_KEY")
-    if not api_key:
-        raise ValueError("GROQ_API_KEY environment variable not set!")
-    return ChatGroq(
-        model="llama-3.3-70b-versatile",
-        api_key=api_key,
-        temperature=0,
-        max_tokens=max_tokens,
-    )
-
 
 GALLERY_SYSTEM = SystemMessage(content="""You are a warm, knowledgeable art guide for \
 "Inside the Paintbox", the portfolio of artist Ragini Chatterjee.
@@ -84,29 +72,6 @@ Guidelines:
 Series available: Portraits, Animal Portraits, Mythical, Thoughts, \
 Camera Series, Diary Entries, Fanart, Cards.""")
 
-
-# ---------------------------------------------------------------------------
-# Node: load_preferences
-# ---------------------------------------------------------------------------
-
-def load_preferences(state: AgentState) -> dict:
-    """Load persisted user preferences from disk."""
-    thread_id = state.get("thread_id", "")
-    prefs = {}
-    if thread_id:
-        prefs_file = PREFS_DIR / f"{thread_id}.json"
-        if prefs_file.exists():
-            try:
-                prefs = json.loads(prefs_file.read_text())
-            except Exception:
-                prefs = {}
-    return {"user_prefs": prefs}
-
-
-# ---------------------------------------------------------------------------
-# Node: classify
-# ---------------------------------------------------------------------------
-
 _CLASSIFY_SYSTEM = """You are a classifier. Given a user message, output exactly one word:
 - "commission" — if the user asks about commissioning, ordering, pricing, or requesting custom artwork to be made
 - "artwork" — if the user asks about specific artworks, series, recommendations, or anything art-related
@@ -114,102 +79,12 @@ _CLASSIFY_SYSTEM = """You are a classifier. Given a user message, output exactly
 
 Respond with only the single word, nothing else."""
 
-def classify(state: AgentState) -> dict:
-    """Classify the user's intent to route to the right node."""
-    # If commission intake is already in progress, continue it regardless of message content
-    if state.get("commission_data", {}).get("in_progress"):
-        return {"intent": "commission"}
-
-    messages = state["messages"]
-    last_user = next(
-        (m.content for m in reversed(messages) if isinstance(m, HumanMessage)), ""
-    )
-
-    llm = _llm(max_tokens=10)
-    result = llm.invoke([
-        SystemMessage(content=_CLASSIFY_SYSTEM),
-        HumanMessage(content=last_user),
-    ])
-    intent = result.content.strip().lower()
-    if "commission" in intent:
-        return {"intent": "commission"}
-    if "artwork" in intent:
-        return {"intent": "artwork"}
-    return {"intent": "general"}
-
-
-# ---------------------------------------------------------------------------
-# Node: react_node (tool-calling agent loop)
-# ---------------------------------------------------------------------------
-
-def react_node(state: AgentState) -> dict:
-    """
-    ReAct loop: LLM decides which tool(s) to call, calls them,
-    observes results, and repeats until it produces a final text response.
-    """
-    llm_with_tools = _llm(max_tokens=512).bind_tools(ARTWORK_TOOLS)
-    tool_node = ToolNode(ARTWORK_TOOLS)
-
-    # Build message list with system prompt
-    messages = [GALLERY_SYSTEM] + list(state["messages"])
-
-    # Inject user preferences as context if they exist
-    prefs = state.get("user_prefs", {})
-    if prefs:
-        pref_lines = []
-        if prefs.get("liked_series"):
-            pref_lines.append(f"Visitor has shown interest in: {', '.join(prefs['liked_series'])}")
-        if prefs.get("mentioned_artworks"):
-            pref_lines.append(f"Previously discussed artworks: {', '.join(prefs['mentioned_artworks'])}")
-        if pref_lines:
-            messages.insert(1, SystemMessage(content="User context: " + ". ".join(pref_lines)))
-
-    new_messages = []
-
-    # ReAct loop — max 5 iterations to prevent runaway loops
-    try:
-        for _ in range(5):
-            response = llm_with_tools.invoke(messages + new_messages)
-            new_messages.append(response)
-
-            # If no tool calls, we have the final answer
-            if not getattr(response, "tool_calls", None):
-                break
-
-            # Execute each tool call
-            tool_results = tool_node.invoke({"messages": messages + new_messages})
-            new_messages.extend(tool_results["messages"])
-
-    except Exception as e:
-        print(f"Error in react_node loop: {e}")
-        fallback = AIMessage(content="I'm sorry, I had trouble looking that up. Could you rephrase your question?")
-        new_messages.append(fallback)
-
-    return {"messages": new_messages}
-
-
-# ---------------------------------------------------------------------------
-# Node: general_chat
-# ---------------------------------------------------------------------------
-
 _GENERAL_SYSTEM = SystemMessage(content="""You are a friendly assistant for \
 "Inside the Paintbox", Ragini Chatterjee's art portfolio website.
 The visitor is making small talk or asking something off-topic.
 Be warm and brief. If you can naturally steer the conversation toward \
 the artwork collection, do so — otherwise just be friendly.
 Keep your response to 1-3 sentences.""")
-
-def general_chat(state: AgentState) -> dict:
-    """Handle small talk and off-topic messages without tool calls."""
-    messages = [_GENERAL_SYSTEM] + list(state["messages"])
-    llm = _llm(max_tokens=200)
-    response = llm.invoke(messages)
-    return {"messages": [response]}
-
-
-# ---------------------------------------------------------------------------
-# Node: commission_intake
-# ---------------------------------------------------------------------------
 
 _COMMISSION_INTAKE_SYSTEM = """You are warmly collecting commission details for artist Ragini Chatterjee.
 
@@ -230,70 +105,6 @@ COMPLETE: <a warm 2-3 sentence summary of all the details collected, ending with
 
 Otherwise ask ONE friendly follow-up question to get the most important missing detail. One question at a time."""
 
-
-def commission_intake(state: AgentState) -> dict:
-    """Collect commission details over multiple turns, then notify Ragini."""
-    messages = state["messages"]
-    commission_data = state.get("commission_data") or {}
-    thread_id = state.get("thread_id", "unknown")
-
-    # Build conversation history for the LLM
-    recent = messages[-8:]
-    history = "\n".join(
-        f"{'Visitor' if isinstance(m, HumanMessage) else 'Assistant'}: {m.content}"
-        for m in recent
-        if isinstance(m, (HumanMessage, AIMessage)) and m.content
-    )
-
-    llm = _llm(max_tokens=300)
-    result = llm.invoke([
-        SystemMessage(content=_COMMISSION_INTAKE_SYSTEM.format(history=history))
-    ])
-    text = result.content.strip()
-
-    if text.upper().startswith("COMPLETE:"):
-        summary = text[9:].strip()
-
-        # Write a file so the admin panel can see this commission
-        commission_file = PREFS_DIR / f"{thread_id}_commission.json"
-        try:
-            commission_file.write_text(json.dumps({
-                "thread_id": thread_id,
-                "summary": summary,
-                "timestamp": datetime.utcnow().isoformat(),
-            }))
-        except Exception as e:
-            print(f"Warning: could not write commission file: {e}")
-
-        confirmation = AIMessage(content=(
-            "Thank you so much for sharing those details! I've passed everything on to Ragini — "
-            "she'll be in touch personally via Instagram (@ragini_chatterjee) or email "
-            "(inthepaintbox@gmail.com) within a few days."
-        ))
-        return {
-            "messages": [confirmation],
-            "commission_data": {
-                "in_progress": False,
-                "awaiting_review": True,
-                "summary": summary,
-            },
-        }
-
-    # Still collecting — ask the next question
-    return {
-        "messages": [AIMessage(content=text)],
-        "commission_data": {
-            "in_progress": True,
-            "awaiting_review": False,
-            "summary": commission_data.get("summary", ""),
-        },
-    }
-
-
-# ---------------------------------------------------------------------------
-# Node: extract_preferences
-# ---------------------------------------------------------------------------
-
 _EXTRACT_SYSTEM = """You are a preference extractor. Given a conversation, identify:
 1. Any art series the visitor showed interest in (from: Portraits, Animal Portraits, Mythical, Thoughts, Camera Series, Diary Entries, Fanart, Cards)
 2. Any specific artwork titles mentioned
@@ -304,72 +115,254 @@ Respond ONLY with a valid JSON object like:
 
 If nothing is found for a field, use an empty list or empty string. No explanation."""
 
-def extract_preferences(state: AgentState) -> dict:
-    """Mine the last exchange for user preferences to persist."""
-    messages = state["messages"]
-    # Only look at the last 4 messages (2 exchanges) for efficiency
-    recent = messages[-4:]
-    conversation_text = "\n".join(
-        f"{type(m).__name__}: {m.content}"
-        for m in recent
-        if isinstance(m, (HumanMessage, AIMessage)) and m.content
-    )
-
-    if not conversation_text.strip():
-        return {}
-
-    llm = _llm(max_tokens=150)
-    result = llm.invoke([
-        SystemMessage(content=_EXTRACT_SYSTEM),
-        HumanMessage(content=conversation_text),
-    ])
-
-    try:
-        extracted = json.loads(result.content.strip())
-    except Exception:
-        return {}
-
-    # Merge with existing prefs
-    existing = state.get("user_prefs", {})
-    liked_series = list(set(existing.get("liked_series", []) + extracted.get("liked_series", [])))
-    mentioned = list(set(existing.get("mentioned_artworks", []) + extracted.get("mentioned_artworks", [])))
-    tone = extracted.get("tone", existing.get("tone", ""))
-
-    return {"user_prefs": {
-        "liked_series": liked_series[:10],       # cap to avoid unbounded growth
-        "mentioned_artworks": mentioned[:20],
-        "tone": tone,
-    }}
-
 
 # ---------------------------------------------------------------------------
-# Node: save_preferences
+# Agent class — LLMs created once, nodes are methods
 # ---------------------------------------------------------------------------
 
-def save_preferences(state: AgentState) -> dict:
-    """Persist user preferences to disk for cross-session memory."""
-    thread_id = state.get("thread_id", "")
-    prefs = state.get("user_prefs", {})
-    if thread_id and prefs:
-        prefs_file = PREFS_DIR / f"{thread_id}.json"
+class PaintboxAgent:
+    """
+    Encapsulates all graph nodes and their shared LLM instances.
+    LLMs are created once at init rather than on every node call.
+    """
+
+    def __init__(self):
+        api_key = os.environ.get("GROQ_API_KEY")
+        if not api_key:
+            raise ValueError("GROQ_API_KEY environment variable not set!")
+
+        def _make_llm(max_tokens: int) -> ChatGroq:
+            return ChatGroq(
+                model="llama-3.3-70b-versatile",
+                api_key=api_key,
+                temperature=0,
+                max_tokens=max_tokens,
+            )
+
+        self._llm_classifier  = _make_llm(10)
+        self._llm_main        = _make_llm(512)
+        self._llm_chat        = _make_llm(200)
+        self._llm_commission  = _make_llm(300)
+        self._llm_extractor   = _make_llm(150)
+        self._llm_with_tools  = self._llm_main.bind_tools(ARTWORK_TOOLS)
+        self._tool_node       = ToolNode(ARTWORK_TOOLS)
+
+    # -----------------------------------------------------------------------
+    # Node: load_preferences
+    # -----------------------------------------------------------------------
+
+    def load_preferences(self, state: AgentState) -> dict:
+        """Load persisted user preferences from disk."""
+        thread_id = state.get("thread_id", "")
+        prefs = {}
+        if thread_id:
+            prefs_file = PREFS_DIR / f"{thread_id}.json"
+            if prefs_file.exists():
+                try:
+                    prefs = json.loads(prefs_file.read_text())
+                except Exception:
+                    prefs = {}
+        return {"user_prefs": prefs}
+
+    # -----------------------------------------------------------------------
+    # Node: classify
+    # -----------------------------------------------------------------------
+
+    def classify(self, state: AgentState) -> dict:
+        """Classify the user's intent to route to the right node."""
+        if state.get("commission_data", {}).get("in_progress"):
+            return {"intent": "commission"}
+
+        messages = state["messages"]
+        last_user = next(
+            (m.content for m in reversed(messages) if isinstance(m, HumanMessage)), ""
+        )
+
+        result = self._llm_classifier.invoke([
+            SystemMessage(content=_CLASSIFY_SYSTEM),
+            HumanMessage(content=last_user),
+        ])
+        intent = result.content.strip().lower()
+        if "commission" in intent:
+            return {"intent": "commission"}
+        if "artwork" in intent:
+            return {"intent": "artwork"}
+        return {"intent": "general"}
+
+    # -----------------------------------------------------------------------
+    # Node: react_node
+    # -----------------------------------------------------------------------
+
+    def react_node(self, state: AgentState) -> dict:
+        """
+        ReAct loop: LLM decides which tool(s) to call, calls them,
+        observes results, and repeats until it produces a final text response.
+        """
+        messages = [GALLERY_SYSTEM] + list(state["messages"])
+
+        prefs = state.get("user_prefs", {})
+        if prefs:
+            pref_lines = []
+            if prefs.get("liked_series"):
+                pref_lines.append(f"Visitor has shown interest in: {', '.join(prefs['liked_series'])}")
+            if prefs.get("mentioned_artworks"):
+                pref_lines.append(f"Previously discussed artworks: {', '.join(prefs['mentioned_artworks'])}")
+            if pref_lines:
+                messages.insert(1, SystemMessage(content="User context: " + ". ".join(pref_lines)))
+
+        new_messages = []
+
         try:
-            prefs_file.write_text(json.dumps(prefs, indent=2))
+            for _ in range(5):
+                response = self._llm_with_tools.invoke(messages + new_messages)
+                new_messages.append(response)
+
+                if not getattr(response, "tool_calls", None):
+                    break
+
+                tool_results = self._tool_node.invoke({"messages": messages + new_messages})
+                new_messages.extend(tool_results["messages"])
+
         except Exception as e:
-            print(f"Warning: could not save prefs for {thread_id}: {e}")
-    return {}
+            print(f"Error in react_node loop: {e}")
+            fallback = AIMessage(content="I'm sorry, I had trouble looking that up. Could you rephrase your question?")
+            new_messages.append(fallback)
 
+        return {"messages": new_messages}
 
-# ---------------------------------------------------------------------------
-# Routing
-# ---------------------------------------------------------------------------
+    # -----------------------------------------------------------------------
+    # Node: general_chat
+    # -----------------------------------------------------------------------
 
-def route_intent(state: AgentState) -> str:
-    intent = state.get("intent", "general")
-    if intent == "commission":
-        return "commission_intake"
-    if intent == "artwork":
-        return "react_node"
-    return "general_chat"
+    def general_chat(self, state: AgentState) -> dict:
+        """Handle small talk and off-topic messages without tool calls."""
+        messages = [_GENERAL_SYSTEM] + list(state["messages"])
+        response = self._llm_chat.invoke(messages)
+        return {"messages": [response]}
+
+    # -----------------------------------------------------------------------
+    # Node: commission_intake
+    # -----------------------------------------------------------------------
+
+    def commission_intake(self, state: AgentState) -> dict:
+        """Collect commission details over multiple turns, then notify Ragini."""
+        messages = state["messages"]
+        commission_data = state.get("commission_data") or {}
+        thread_id = state.get("thread_id", "unknown")
+
+        recent = messages[-8:]
+        history = "\n".join(
+            f"{'Visitor' if isinstance(m, HumanMessage) else 'Assistant'}: {m.content}"
+            for m in recent
+            if isinstance(m, (HumanMessage, AIMessage)) and m.content
+        )
+
+        result = self._llm_commission.invoke([
+            SystemMessage(content=_COMMISSION_INTAKE_SYSTEM.format(history=history))
+        ])
+        text = result.content.strip()
+
+        if text.upper().startswith("COMPLETE:"):
+            summary = text[9:].strip()
+
+            commission_file = PREFS_DIR / f"{thread_id}_commission.json"
+            try:
+                commission_file.write_text(json.dumps({
+                    "thread_id": thread_id,
+                    "summary": summary,
+                    "timestamp": datetime.utcnow().isoformat(),
+                }))
+            except Exception as e:
+                print(f"Warning: could not write commission file: {e}")
+
+            confirmation = AIMessage(content=(
+                "Thank you so much for sharing those details! I've passed everything on to Ragini — "
+                "she'll be in touch personally via Instagram (@ragini_chatterjee) or email "
+                "(inthepaintbox@gmail.com) within a few days."
+            ))
+            return {
+                "messages": [confirmation],
+                "commission_data": {
+                    "in_progress": False,
+                    "awaiting_review": True,
+                    "summary": summary,
+                },
+            }
+
+        return {
+            "messages": [AIMessage(content=text)],
+            "commission_data": {
+                "in_progress": True,
+                "awaiting_review": False,
+                "summary": commission_data.get("summary", ""),
+            },
+        }
+
+    # -----------------------------------------------------------------------
+    # Node: extract_preferences
+    # -----------------------------------------------------------------------
+
+    def extract_preferences(self, state: AgentState) -> dict:
+        """Mine the last exchange for user preferences to persist."""
+        messages = state["messages"]
+        recent = messages[-4:]
+        conversation_text = "\n".join(
+            f"{type(m).__name__}: {m.content}"
+            for m in recent
+            if isinstance(m, (HumanMessage, AIMessage)) and m.content
+        )
+
+        if not conversation_text.strip():
+            return {}
+
+        result = self._llm_extractor.invoke([
+            SystemMessage(content=_EXTRACT_SYSTEM),
+            HumanMessage(content=conversation_text),
+        ])
+
+        try:
+            extracted = json.loads(result.content.strip())
+        except Exception:
+            return {}
+
+        existing = state.get("user_prefs", {})
+        liked_series = list(set(existing.get("liked_series", []) + extracted.get("liked_series", [])))
+        mentioned = list(set(existing.get("mentioned_artworks", []) + extracted.get("mentioned_artworks", [])))
+        tone = extracted.get("tone", existing.get("tone", ""))
+
+        return {"user_prefs": {
+            "liked_series": liked_series[:10],
+            "mentioned_artworks": mentioned[:20],
+            "tone": tone,
+        }}
+
+    # -----------------------------------------------------------------------
+    # Node: save_preferences
+    # -----------------------------------------------------------------------
+
+    def save_preferences(self, state: AgentState) -> dict:
+        """Persist user preferences to disk for cross-session memory."""
+        thread_id = state.get("thread_id", "")
+        prefs = state.get("user_prefs", {})
+        if thread_id and prefs:
+            prefs_file = PREFS_DIR / f"{thread_id}.json"
+            try:
+                prefs_file.write_text(json.dumps(prefs, indent=2))
+            except Exception as e:
+                print(f"Warning: could not save prefs for {thread_id}: {e}")
+        return {}
+
+    # -----------------------------------------------------------------------
+    # Routing
+    # -----------------------------------------------------------------------
+
+    def route_intent(self, state: AgentState) -> str:
+        intent = state.get("intent", "general")
+        if intent == "commission":
+            return "commission_intake"
+        if intent == "artwork":
+            return "react_node"
+        return "general_chat"
 
 
 # ---------------------------------------------------------------------------
@@ -377,28 +370,29 @@ def route_intent(state: AgentState) -> str:
 # ---------------------------------------------------------------------------
 
 def _build_graph():
+    agent = PaintboxAgent()
     graph = StateGraph(AgentState)
 
-    graph.add_node("load_preferences", load_preferences)
-    graph.add_node("classify", classify)
-    graph.add_node("react_node", react_node)
-    graph.add_node("general_chat", general_chat)
-    graph.add_node("commission_intake", commission_intake)
-    graph.add_node("extract_preferences", extract_preferences)
-    graph.add_node("save_preferences", save_preferences)
+    graph.add_node("load_preferences",   agent.load_preferences)
+    graph.add_node("classify",           agent.classify)
+    graph.add_node("react_node",         agent.react_node)
+    graph.add_node("general_chat",       agent.general_chat)
+    graph.add_node("commission_intake",  agent.commission_intake)
+    graph.add_node("extract_preferences",agent.extract_preferences)
+    graph.add_node("save_preferences",   agent.save_preferences)
 
     graph.add_edge(START, "load_preferences")
     graph.add_edge("load_preferences", "classify")
-    graph.add_conditional_edges("classify", route_intent, {
-        "react_node": "react_node",
-        "general_chat": "general_chat",
+    graph.add_conditional_edges("classify", agent.route_intent, {
+        "react_node":        "react_node",
+        "general_chat":      "general_chat",
         "commission_intake": "commission_intake",
     })
-    graph.add_edge("react_node", "extract_preferences")
-    graph.add_edge("general_chat", "extract_preferences")
-    graph.add_edge("commission_intake", "extract_preferences")
+    graph.add_edge("react_node",          "extract_preferences")
+    graph.add_edge("general_chat",        "extract_preferences")
+    graph.add_edge("commission_intake",   "extract_preferences")
     graph.add_edge("extract_preferences", "save_preferences")
-    graph.add_edge("save_preferences", END)
+    graph.add_edge("save_preferences",    END)
 
     db_path = os.environ.get("MEMORY_DB_PATH", "./conversation_memory.db")
     checkpointer = SqliteSaver.from_conn_string(db_path)
@@ -430,7 +424,6 @@ def chat_with_memory(message: str, thread_id: str) -> str:
         config=config,
     )
 
-    # Last message in the list is always the final AI response
     for msg in reversed(result["messages"]):
         if isinstance(msg, AIMessage) and msg.content:
             return msg.content
@@ -457,7 +450,6 @@ def get_conversation_history(thread_id: str) -> List[dict]:
             if isinstance(msg, HumanMessage):
                 history.append({"role": "user", "content": msg.content})
             elif isinstance(msg, AIMessage) and msg.content:
-                # Skip intermediate messages that only contain tool_calls
                 history.append({"role": "assistant", "content": msg.content})
         return history
 
@@ -473,7 +465,6 @@ def clear_conversation(thread_id: str) -> bool:
     Returns:
         True if successful, False otherwise
     """
-    # Clear preference file
     prefs_file = PREFS_DIR / f"{thread_id}.json"
     if prefs_file.exists():
         try:
