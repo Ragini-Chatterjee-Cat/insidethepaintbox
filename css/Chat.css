@@ -138,16 +138,18 @@ textarea:focus {
     display: inline-block;
     margin-top: 6px;
     padding: 6px 14px;
-    background-color: #8B5A2B;
-    color: #fff;
+    background-color: transparent;
+    color: #8B5A2B;
+    border: 1.5px solid #8B5A2B;
     border-radius: 20px;
     text-decoration: none;
     font-size: 0.85em;
-    transition: background-color 0.2s ease;
+    transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 .chat-link-btn:hover {
-    background-color: #5c4033;
+    background-color: #8B5A2B;
+    color: #fff;
     text-decoration: none;
 }
 

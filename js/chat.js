@@ -181,9 +181,19 @@ document.addEventListener('DOMContentLoaded', function() {
      * Convert URLs in text to clickable links
      */
     function linkifyText(text) {
-        // Regex to match URLs
         const urlRegex = /(https?:\/\/[^\s]+)/g;
-        return text.replace(urlRegex, '<a href="$1" target="_blank" class="chat-link-btn">View Link</a>');
+        return text.replace(urlRegex, (url) => {
+            let label = 'Home';
+            try {
+                const pathname = new URL(url).pathname.replace(/\/$/, '');
+                if (pathname) {
+                    label = pathname.split('/').filter(Boolean).pop()
+                        .replace(/[-_]/g, ' ')
+                        .replace(/\b\w/g, c => c.toUpperCase());
+                }
+            } catch (e) { /* fallback to Home */ }
+            return `<a href="${url}" target="_blank" class="chat-link-btn">${label}</a>`;
+        });
     }
 
     /**
