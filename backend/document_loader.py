@@ -169,15 +169,14 @@ def load_all_artworks(website_path):
     documents = []
     website_path = Path(website_path)
 
-    # Look for artwork HTML files in multiple locations
+    # Look for artwork HTML files
     artwork_paths = [
         website_path / "artworks",
-        website_path / "pages" / "artworks",
     ]
 
     for artwork_dir in artwork_paths:
         if artwork_dir.exists():
-            for html_file in artwork_dir.glob("*.html"):
+            for html_file in artwork_dir.glob("**/*.html"):
                 doc = load_artwork_from_html(html_file, website_path)
                 if doc and doc["content"]:
                     documents.append(doc)
@@ -208,7 +207,7 @@ def load_about_page(website_path):
 
 if __name__ == "__main__":
     # Test the loader
-    docs = load_all_artworks("../")
+    docs = load_all_artworks("../frontend/")
     print(f"\nLoaded {len(docs)} documents")
     for doc in docs[:3]:
         print(f"\n--- {doc['title']} ---")

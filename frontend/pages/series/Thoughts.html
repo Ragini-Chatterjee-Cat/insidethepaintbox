@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>
+           Thoughts
+        </title>
+        <script>
+            // Check if page is unlocked
+            if (localStorage.getItem('thoughtsUnlocked') !== 'true') {
+                window.location.href = '../hyperplane-game.html';
+            }
+        </script>
+        <link rel="icon" type="image/png" href="../../favicon.png">
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+        <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css">
+        <link href="../../css/Inside.css" type="text/css" rel="stylesheet">
+        <link href="../../css/Chat.css" type="text/css" rel="stylesheet">
+    </head>
+    <body>
+    <header>
+         <div class="navbar">
+            <div class="dropdown">
+                <a class="dropbtn">Series
+                </a>
+                <div class="dropdown-content">
+                  <a href="Portraits.html">Portraits</a>
+                  <a href="portraits-animals.html">Animal Portraits</a>
+                  <a href="Mythical.html">Mythical</a>
+                  <a href="Thoughts.html">Thoughts</a>
+                  <a href="Cam.html">Camera Series</a>
+                  <a href="diary-entries.html">Diary Entries</a>
+                  <a href="Fanart.html">Fanart</a>
+                  <a href="Cards.html">Cards</a>
+                </div>
+              </div>
+            <a class="btn-transperent" href="../../Index.html" id='active'>Home</a>
+              <a class="btn-transperent" href="../about.html">About us</a>
+            </div>
+        <intro>
+            <h1>THOUGHTS
+                <h6>A COLLECTION OF EXPRESSIVE ARTWORKS.</h6>
+            </h1>
+        </intro>
+    </header>
+<main>
+    <div class="artwork-carousel">
+        <div class="carousel-container">
+            <div class="carousel-track">
+                <div class="carousel-slide">
+                    <a href="../../artworks/thoughts/whine.html">
+                        <img src="../../images/artworks/Thoughts/Whine.png" alt="Whine"/>
+                        <h2 class="slide-title">Whine</h2>
+                    </a>
+                </div>
+                <div class="carousel-slide">
+                    <a href="../../artworks/thoughts/hurt.html">
+                        <img src="../../images/artworks/Thoughts/Hurt.png" alt="Hurt"/>
+                        <h2 class="slide-title">Hurt</h2>
+                    </a>
+                </div>
+                <div class="carousel-slide">
+                    <a href="thoughts-trapped.html">
+                        <img src="../../images/artworks/Thoughts/Trapped/Trapped.PNG" alt="Trapped"/>
+                        <h2 class="slide-title">Trapped</h2>
+                    </a>
+                </div>
+                <div class="carousel-slide">
+                    <a href="../../artworks/thoughts/Voices.html">
+                        <img src="../../images/artworks/Thoughts/Voices.jpeg" alt="Voices"/>
+                        <h2 class="slide-title">Voices</h2>
+                    </a>
+                </div>
+                <div class="carousel-slide">
+                    <a href="../../artworks/thoughts/Flowers.html">
+                        <img src="../../images/artworks/Thoughts/The%20three%20small%20ones.jpg" alt="Flowers"/>
+                        <h2 class="slide-title">Flowers</h2>
+                    </a>
+                </div>
+                <div class="carousel-slide">
+                    <a href="../../artworks/thoughts/behind-the-tiger.html">
+                        <img src="../../images/artworks/Thoughts/Behind_the_tiger.jpg" alt="Behind the Tiger"/>
+                        <h2 class="slide-title">Behind the Tiger</h2>
+                    </a>
+                </div>
+            </div>
+        </div>
+        <div class="carousel-dots"></div>
+    </div>
+
+    <br>
+    <div class="icon-bar" align="middle">
+        <a href="../contact.html"><i class="fa fa-envelope"></i></a>
+        <a href="https://www.instagram.com/ragini_chatterjee/"><i class="fa fa-instagram"></i></a>
+    </div>
+</main>
+    <div class="chat-button" id="chatButton">
+        <i class="fa fa-comment"></i>
+    </div>
+
+    <div class="chat-box" id="chatBox">
+        <div class="chat-header">
+            <h3>Get in Touch</h3>
+            <button class="chat-close" id="chatClose">&times;</button>
+        </div>
+        <div class="chat-body">
+        </div>
+        <div class="chat-form">
+            <form id="chatForm">
+                <div class="chat-input-group">
+                    <input type="text" id="chatName" class="chat-input" placeholder="Your Name" required>
+                </div>
+                <div class="chat-input-group">
+                    <input type="email" id="chatEmail" class="chat-input" placeholder="Your Email" required>
+                </div>
+                <div class="chat-input-group">
+                    <textarea id="chatMessage" class="chat-input" placeholder="Your Message" required></textarea>
+                </div>
+                <button type="submit" class="chat-submit">Send Message</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="../../js/chat.js"></script>
+    <script src="../../js/carousel.js"></script>
+    </body>
+</html>

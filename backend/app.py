@@ -20,7 +20,8 @@ load_dotenv()
 # Import our modules
 from rag import query_rag, index_documents, get_collection_stats
 from document_loader import load_all_artworks, load_about_page
-from langgraph_memory import chat_with_memory, get_conversation_history, clear_conversation, PREFS_DIR
+from agent import chat_with_memory, get_conversation_history, clear_conversation
+from agent.nodes import PREFS_DIR
 
 
 @asynccontextmanager
@@ -30,10 +31,10 @@ async def lifespan(app: FastAPI):
     print("Starting up... Indexing artwork documents...")
     try:
         # Load documents from the website
-        docs = load_all_artworks("../")
+        docs = load_all_artworks("../frontend/")
 
         # Also load about page
-        about = load_about_page("../")
+        about = load_about_page("../frontend/")
         if about:
             docs.append(about)
 
@@ -211,8 +212,8 @@ async def reindex_documents():
     Call this if you've updated your artwork pages
     """
     try:
-        docs = load_all_artworks("../")
-        about = load_about_page("../")
+        docs = load_all_artworks("../frontend/")
+        about = load_about_page("../frontend/")
         if about:
             docs.append(about)
 
