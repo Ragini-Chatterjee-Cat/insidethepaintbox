@@ -4,6 +4,8 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+from guardrails import Guard
+from guardrails.hub import ToxicLanguage
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_groq import ChatGroq
 from langgraph.prebuilt import ToolNode
@@ -45,6 +47,7 @@ class PaintboxAgent:
         self._llm_extractor  = _make_llm(150)
         self._llm_with_tools = self._llm_main.bind_tools(ARTWORK_TOOLS)
         self._tool_node      = ToolNode(ARTWORK_TOOLS, handle_tool_errors=True)
+        self._guard          = Guard().use(ToxicLanguage, on_fail="exception")
 
     # -----------------------------------------------------------------------
     # Node: load_preferences
@@ -219,6 +222,23 @@ class PaintboxAgent:
             prefs_file = PREFS_DIR / f"{thread_id}.json"
             prefs_file.write_text(json.dumps(prefs, indent=2))
         return {}
+
+    # -----------------------------------------------------------------------
+    # Node: guardrail
+    # -----------------------------------------------------------------------
+
+    def guardrail_node(self, state: AgentState) -> dict:
+        last_ai = next(
+            (m for m in reversed(state["messages"]) if isinstance(m, AIMessage)),
+            None,
+        )
+        if not last_ai:
+            return {}
+        try:
+            self._guard.validate(last_ai.content)
+            return {}
+        except Exception:
+            return {"messages": [AIMessage(content="I'm not able to provide that response. Feel free to ask me about Ragini's artwork or commission information.")]}
 
     # -----------------------------------------------------------------------
     # Routing
