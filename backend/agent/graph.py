@@ -14,7 +14,6 @@ def build_graph():
     graph.add_node("react_node",          agent.react_node)
     graph.add_node("general_chat",        agent.general_chat)
     graph.add_node("commission_intake",   agent.commission_intake)
-    graph.add_node("guardrail",           agent.guardrail_node)
     graph.add_node("extract_preferences", agent.extract_preferences)
     graph.add_node("save_preferences",    agent.save_preferences)
 
@@ -25,10 +24,9 @@ def build_graph():
         "general_chat":      "general_chat",
         "commission_intake": "commission_intake",
     })
-    graph.add_edge("react_node",          "guardrail")
-    graph.add_edge("general_chat",        "guardrail")
-    graph.add_edge("commission_intake",   "guardrail")
-    graph.add_edge("guardrail",           "extract_preferences")
+    graph.add_edge("react_node",          "extract_preferences")
+    graph.add_edge("general_chat",        "extract_preferences")
+    graph.add_edge("commission_intake",   "extract_preferences")
     graph.add_edge("extract_preferences", "save_preferences")
     graph.add_edge("save_preferences",    END)
 
