@@ -36,6 +36,7 @@ class PaintboxAgent:
                 api_key=api_key,
                 temperature=0,
                 max_tokens=max_tokens,
+                max_retries=3,
             )
 
         self._llm_classifier = _make_llm(10)
