@@ -21,6 +21,12 @@ from .prompts import (
 PREFS_DIR = Path(os.environ.get("PREFS_DIR", "./user_prefs"))
 PREFS_DIR.mkdir(parents=True, exist_ok=True)
 
+MAX_HISTORY = 10  # keep last N messages to avoid token limit on Groq free tier
+
+
+def _trim(messages: list, n: int = MAX_HISTORY) -> list:
+    return messages[-n:] if len(messages) > n else messages
+
 
 class PaintboxAgent:
     """Encapsulates all graph nodes and their shared LLM instances."""
@@ -68,7 +74,7 @@ class PaintboxAgent:
         if state.get("commission_data", {}).get("in_progress"):
             return {"intent": "commission"}
 
-        messages = state["messages"]
+        messages = _trim(state["messages"])
         last_user = next(
             (m.content for m in reversed(messages) if isinstance(m, HumanMessage)), ""
         )
@@ -88,7 +94,7 @@ class PaintboxAgent:
     # -----------------------------------------------------------------------
 
     def react_node(self, state: AgentState) -> dict:
-        messages = [GALLERY_SYSTEM] + list(state["messages"])
+        messages = [GALLERY_SYSTEM] + _trim(list(state["messages"]))
 
         prefs = state.get("user_prefs", {})
         if prefs:
@@ -116,7 +122,7 @@ class PaintboxAgent:
     # -----------------------------------------------------------------------
 
     def general_chat(self, state: AgentState) -> dict:
-        messages = [GENERAL_SYSTEM] + list(state["messages"])
+        messages = [GENERAL_SYSTEM] + _trim(list(state["messages"]))
         response = self._llm_chat.invoke(messages)
         return {"messages": [response]}
 
