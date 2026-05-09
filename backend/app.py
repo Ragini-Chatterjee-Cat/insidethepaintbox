@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 import os
 import json
 import secrets
+import traceback
 from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
@@ -170,6 +171,7 @@ async def chat_v2(request: ChatRequestV2):
         return ChatResponseV2(response=response, thread_id=request.thread_id)
     except Exception as e:
         print(f"Error in chat v2 endpoint: {e}")
+        traceback.print_exc()
         raise HTTPException(
             status_code=500,
             detail="Sorry, I encountered an error. Please try again."

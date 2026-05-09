@@ -38,7 +38,8 @@ def build_graph():
         checkpointer = PostgresSaver(conn)
         checkpointer.setup()
     else:
-        checkpointer = None
+        from langgraph.checkpoint.memory import MemorySaver
+        checkpointer = MemorySaver()
 
     return graph.compile(checkpointer=checkpointer)
 
