@@ -8,6 +8,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_groq import ChatGroq
 from langgraph.prebuilt import ToolNode
 
+import db
 from tools import ARTWORK_TOOLS
 from .state import AgentState
 from .prompts import (
@@ -59,11 +60,7 @@ class PaintboxAgent:
 
     def load_preferences(self, state: AgentState) -> dict:
         thread_id = state.get("thread_id", "")
-        prefs = {}
-        if thread_id:
-            prefs_file = PREFS_DIR / f"{thread_id}.json"
-            if prefs_file.exists():
-                prefs = json.loads(prefs_file.read_text())
+        prefs = db.load_user_prefs(thread_id, PREFS_DIR) if thread_id else {}
         return {"user_prefs": prefs}
 
     # -----------------------------------------------------------------------
@@ -149,12 +146,7 @@ class PaintboxAgent:
 
         if text.upper().startswith("COMPLETE:"):
             summary = text[9:].strip()
-            commission_file = PREFS_DIR / f"{thread_id}_commission.json"
-            commission_file.write_text(json.dumps({
-                "thread_id": thread_id,
-                "summary": summary,
-                "timestamp": datetime.utcnow().isoformat(),
-            }))
+            db.save_commission(thread_id, summary, datetime.utcnow().isoformat(), PREFS_DIR)
             confirmation = AIMessage(content=(
                 "Thank you so much for sharing those details! I've passed everything on to Ragini — "
                 "she'll be in touch personally via Instagram (@ragini_chatterjee) or email "
@@ -223,8 +215,7 @@ class PaintboxAgent:
         thread_id = state.get("thread_id", "")
         prefs = state.get("user_prefs", {})
         if thread_id and prefs:
-            prefs_file = PREFS_DIR / f"{thread_id}.json"
-            prefs_file.write_text(json.dumps(prefs, indent=2))
+            db.save_user_prefs(thread_id, prefs, PREFS_DIR)
         return {}
 
     # -----------------------------------------------------------------------

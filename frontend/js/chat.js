@@ -125,7 +125,21 @@ document.addEventListener('DOMContentLoaded', function() {
             });
 
             if (!response.ok) {
-                throw new Error('API request failed');
+                let errorMsg;
+                if (response.status === 400) {
+                    errorMsg = "Something went wrong with your message. Please try again.";
+                } else if (response.status === 429) {
+                    errorMsg = "You're sending messages too quickly. Please wait a moment and try again.";
+                } else if (response.status === 500) {
+                    errorMsg = "The server ran into an error. Please try again in a moment.";
+                } else {
+                    errorMsg = `Unexpected error (${response.status}). Please try again.`;
+                }
+                typingIndicator.remove();
+                addMessage(errorMsg, 'bot');
+                input.disabled = false;
+                input.focus();
+                return;
             }
 
             const data = await response.json();
@@ -139,13 +153,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 startReplyPolling(threadId);
             }
 
-            // Conversation history is now managed by the backend via LangGraph
-
         } catch (error) {
             console.error('Chat error:', error);
             typingIndicator.remove();
             addMessage(
-                "I'm sorry, can't connect to the server right now. Please try again later.",
+                "Can't reach the server right now. Please check your connection and try again.",
                 'bot'
             );
         }

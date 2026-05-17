@@ -7,28 +7,33 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 import os
-import json
 import secrets
 import traceback
 from datetime import datetime
-from pathlib import Path
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
 
 # Import our modules
-from rag import query_rag, index_documents, get_collection_stats
+import db
+from rag import index_documents, get_collection_stats
 from document_loader import load_all_artworks, load_about_page
 from agent import chat_with_memory, get_conversation_history, clear_conversation
 from agent.nodes import PREFS_DIR
 
 
+limiter = Limiter(key_func=get_remote_address)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events"""
-    # Startup: Index documents automatically
+    db.setup_tables()
     print("Starting up... Indexing artwork documents...")
     try:
         # Load documents from the website
@@ -62,16 +67,18 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Configure CORS (allow your Netlify site to call this API)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5500",      # Local development
-        "http://127.0.0.1:5500",      # Local development
-        "http://localhost:3000",       # Local development
-        "https://*.netlify.app",       # Netlify preview URLs
-        "*"                            # Allow all (update in production!)
+        "http://localhost:5500",
+        "http://127.0.0.1:5500",
+        "http://localhost:3000",
+        "https://insidethepaintbox.netlify.app",
     ],
+    allow_origin_regex=r"https://.*\.netlify\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -127,20 +134,18 @@ async def health_check():
 
 
 @app.post("/chat/v2", response_model=ChatResponseV2)
-async def chat_v2(request: ChatRequestV2):
-    """
-    Chat endpoint with persistent memory (LangGraph)
-    Uses thread_id for conversation persistence across sessions
-    """
-    if not request.message or not request.message.strip():
+@limiter.limit("20/minute")
+async def chat_v2(request: Request, body: ChatRequestV2):
+    """Chat endpoint with persistent memory (LangGraph)."""
+    if not body.message or not body.message.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
-    if not request.thread_id or not request.thread_id.strip():
+    if not body.thread_id or not body.thread_id.strip():
         raise HTTPException(status_code=400, detail="thread_id is required")
 
     try:
-        response = chat_with_memory(request.message, request.thread_id)
-        return ChatResponseV2(response=response, thread_id=request.thread_id)
+        response = chat_with_memory(body.message, body.thread_id)
+        return ChatResponseV2(response=response, thread_id=body.thread_id)
     except Exception as e:
         print(f"Error in chat v2 endpoint: {e}")
         traceback.print_exc()
@@ -223,17 +228,7 @@ def _check_admin(request: Request):
 async def get_pending_commissions(request: Request):
     """Return all unreviewed commission requests (admin only)."""
     _check_admin(request)
-    commissions = []
-    for f in sorted(PREFS_DIR.glob("*_commission.json")):
-        try:
-            data = json.loads(f.read_text())
-            # Only show ones that haven't been replied to yet
-            reply_file = PREFS_DIR / f"{data['thread_id']}_reply.json"
-            if not reply_file.exists():
-                commissions.append(data)
-        except Exception:
-            continue
-    return {"commissions": commissions}
+    return {"commissions": db.get_pending_commissions(PREFS_DIR)}
 
 
 @app.post("/admin/respond/{thread_id}")
@@ -244,26 +239,16 @@ async def respond_to_commission(thread_id: str, request: Request):
     message = body.get("message", "").strip()
     if not message:
         raise HTTPException(status_code=400, detail="message is required")
-
-    reply_file = PREFS_DIR / f"{thread_id}_reply.json"
-    reply_file.write_text(json.dumps({
-        "thread_id": thread_id,
-        "message": message,
-        "timestamp": datetime.utcnow().isoformat(),
-    }))
+    db.save_commission_reply(thread_id, message, PREFS_DIR)
     return {"status": "sent", "thread_id": thread_id}
 
 
 @app.get("/chat/updates/{thread_id}")
 async def poll_for_reply(thread_id: str):
     """Visitor polls this to check whether Ragini has replied to their commission."""
-    reply_file = PREFS_DIR / f"{thread_id}_reply.json"
-    if reply_file.exists():
-        try:
-            data = json.loads(reply_file.read_text())
-            return {"has_reply": True, "message": data["message"]}
-        except Exception:
-            pass
+    reply = db.get_commission_reply(thread_id, PREFS_DIR)
+    if reply:
+        return {"has_reply": True, "message": reply["message"]}
     return {"has_reply": False}
 
 

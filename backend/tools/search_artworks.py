@@ -12,8 +12,10 @@ class SearchArtworksTool(BaseTool):
     name: str = "search_artworks"
     description: str = (
         "Search the artwork collection using semantic similarity. "
-        "Use this when a visitor asks about specific themes, styles, subjects, or artwork descriptions "
-        "— NOT when they name a specific artwork title or a series name."
+        "Use this when a visitor asks for recommendations, best works, popular pieces, or to browse generally. "
+        "Also use it for themes, moods, styles, or subjects ('something emotional', 'animals', 'colourful'). "
+        "Do NOT use this when the visitor names a specific artwork title (use get_artwork_details) "
+        "or a series name (use filter_by_series)."
     )
     args_schema: type[BaseModel] = SearchArtworksInput
     handle_tool_error: bool = True
