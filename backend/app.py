@@ -83,16 +83,9 @@ class ChatMessage(BaseModel):
     role: str  # "user" or "assistant"
     content: str
 
-class ChatRequest(BaseModel):
-    message: str
-    history: list[ChatMessage] = []  # Conversation history (legacy)
-
 class ChatRequestV2(BaseModel):
     message: str
     thread_id: str  # Persistent thread ID for memory
-
-class ChatResponse(BaseModel):
-    response: str
 
 class ChatResponseV2(BaseModel):
     response: str
@@ -131,27 +124,6 @@ async def health_check():
         documents_count=stats["document_count"]
     )
 
-
-@app.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
-    """
-    Legacy chat endpoint (stateless)
-    Receives a question and returns an AI-generated response
-    """
-    if not request.message or not request.message.strip():
-        raise HTTPException(status_code=400, detail="Message cannot be empty")
-
-    try:
-        # Convert history to list of dicts for the RAG function
-        history = [{"role": msg.role, "content": msg.content} for msg in request.history]
-        response = query_rag(request.message, history)
-        return ChatResponse(response=response)
-    except Exception as e:
-        print(f"Error in chat endpoint: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail="Sorry, I encountered an error. Please try again."
-        )
 
 
 @app.post("/chat/v2", response_model=ChatResponseV2)

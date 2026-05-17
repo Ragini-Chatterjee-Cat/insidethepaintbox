@@ -30,16 +30,20 @@ def build_graph():
     graph.add_edge("extract_preferences", "save_preferences")
     graph.add_edge("save_preferences",    END)
 
+    from langgraph.checkpoint.memory import MemorySaver
+    checkpointer = MemorySaver()
     postgres_uri = os.environ.get("POSTGRES_URI")
     if postgres_uri:
-        import psycopg
-        from langgraph.checkpoint.postgres import PostgresSaver
-        conn = psycopg.connect(postgres_uri, autocommit=True)
-        checkpointer = PostgresSaver(conn)
-        checkpointer.setup()
-    else:
-        from langgraph.checkpoint.memory import MemorySaver
-        checkpointer = MemorySaver()
+        try:
+            import psycopg
+            from langgraph.checkpoint.postgres import PostgresSaver
+            conn = psycopg.connect(postgres_uri, autocommit=True)
+            checkpointer = PostgresSaver(conn)
+            checkpointer.setup()
+        except Exception as e:
+            import logging
+            logging.warning(f"Postgres connection failed, falling back to MemorySaver: {e}")
+            checkpointer = MemorySaver()
 
     return graph.compile(checkpointer=checkpointer)
 

@@ -5,14 +5,14 @@ BASE_URL = "https://insidethepaintbox.netlify.app"
 CONFIDENCE_THRESHOLD = 1.5
 
 SERIES_URLS = {
-    "Portraits":        f"{BASE_URL}/pages/series/Portraits.html",
+    "Portraits":        f"{BASE_URL}/pages/series/portraits.html",
     "Animal Portraits": f"{BASE_URL}/pages/series/portraits-animals.html",
-    "Mythical":         f"{BASE_URL}/pages/series/Mythical.html",
-    "Thoughts":         f"{BASE_URL}/pages/series/Thoughts.html",
-    "Camera Series":    f"{BASE_URL}/pages/series/Cam.html",
+    "Mythical":         f"{BASE_URL}/pages/series/mythical.html",
+    "Thoughts":         f"{BASE_URL}/pages/series/thoughts.html",
+    "Camera Series":    f"{BASE_URL}/pages/series/cam.html",
     "Diary Entries":    f"{BASE_URL}/pages/series/diary-entries.html",
-    "Fanart":           f"{BASE_URL}/pages/series/Fanart.html",
-    "Cards":            f"{BASE_URL}/pages/series/Cards.html",
+    "Fanart":           f"{BASE_URL}/pages/series/fanart.html",
+    "Cards":            f"{BASE_URL}/pages/series/cards.html",
 }
 
 COMMISSION_INFO = """

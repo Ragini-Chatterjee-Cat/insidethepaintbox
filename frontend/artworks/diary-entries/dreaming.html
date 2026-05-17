@@ -12,6 +12,7 @@
         <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.16.0/umd/popper.min.js"></script>
         <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.0/js/bootstrap.min.js"></script>
+            <link href="../../css/Chat.css" type="text/css" rel="stylesheet">
     </head>
     <header>
         <div class="navbar">
@@ -50,4 +51,32 @@
             <a href="https://www.instagram.com/ragini_chatterjee/"><i class="fa fa-instagram"></i></a>
         </div>
     </main>
+    <div class="chat-button" id="chatButton">
+        <i class="fa fa-comment"></i>
+    </div>
+
+    <div class="chat-box" id="chatBox">
+        <div class="chat-header">
+            <h3>Get in Touch</h3>
+            <button class="chat-close" id="chatClose">&times;</button>
+        </div>
+        <div class="chat-body">
+        </div>
+        <div class="chat-form">
+            <form id="chatForm">
+                <div class="chat-input-group">
+                    <input type="text" id="chatName" class="chat-input" placeholder="Your Name" required>
+                </div>
+                <div class="chat-input-group">
+                    <input type="email" id="chatEmail" class="chat-input" placeholder="Your Email" required>
+                </div>
+                <div class="chat-input-group">
+                    <textarea id="chatMessage" class="chat-input" placeholder="Your Message" required></textarea>
+                </div>
+                <button type="submit" class="chat-submit">Send Message</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="../../js/chat.js"></script>
 </html>

@@ -45,11 +45,16 @@ body{
 
 a{
    text-decoration: none;
-   color: #5c4033;
+   color: #5c4033 !important;
 }
 a:hover{
    text-decoration: none;
-   color: #5c4033;
+   color: #5c4033 !important;
+}
+a:focus-visible,
+a:focus {
+   outline: none;
+   color: #5c4033 !important;
 }
 
 header{
