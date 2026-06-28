@@ -3,9 +3,9 @@ RAG (Retrieval-Augmented Generation) Module
 Handles document indexing, embedding, and retrieval
 """
 
+import anthropic
 import chromadb
 from sentence_transformers import SentenceTransformer
-from groq import Groq
 import os
 from typing import List, Dict
 from document_loader import SERIES_ARTWORK_MAP
@@ -23,12 +23,11 @@ collection = chroma_client.get_or_create_collection(
 )
 
 
-def get_groq_client():
-    """Get Groq client with API key"""
-    api_key = os.environ.get("GROQ_API_KEY")
+def get_anthropic_client():
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
-        raise ValueError("GROQ_API_KEY environment variable not set!")
-    return Groq(api_key=api_key)
+        raise ValueError("ANTHROPIC_API_KEY environment variable not set!")
+    return anthropic.Anthropic(api_key=api_key)
 
 
 def index_documents(documents: List[Dict]):
@@ -112,7 +111,7 @@ def generate_response(question: str, context_docs: List[Dict], conversation_hist
         context_note = "\n\n(Note: This context may not be directly relevant.)"
 
     try:
-        client = get_groq_client()
+        client = get_anthropic_client()
 
         # Build conversation history string for reasoning
         history_str = ""
@@ -149,13 +148,12 @@ Think step by step:
 
 Write your analysis concisely:"""
 
-        reasoning_response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+        reasoning_response = client.messages.create(
+            model="claude-haiku-4-5-20251001",
             messages=[{"role": "user", "content": reasoning_prompt}],
             max_tokens=300,
-            temperature=0
         )
-        reasoning = reasoning_response.choices[0].message.content
+        reasoning = reasoning_response.content[0].text
         print(f"[REASONING]: {reasoning[:200]}...")  # Debug log (truncated)
 
         # ============ STEP 2: FINAL RESPONSE ============
@@ -178,14 +176,13 @@ Now write your response to the visitor. Guidelines:
 
 Your response:"""
 
-        final_response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+        final_response = client.messages.create(
+            model="claude-haiku-4-5-20251001",
             messages=[{"role": "user", "content": response_prompt}],
             max_tokens=250,
-            temperature=0
         )
 
-        return final_response.choices[0].message.content
+        return final_response.content[0].text
 
     except Exception as e:
         print(f"Error generating response: {e}")
