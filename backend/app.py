@@ -134,7 +134,7 @@ async def health_check():
 
 
 MAX_MESSAGE_LENGTH = 500   # chars — long prompts signal off-topic abuse
-MAX_THREAD_MESSAGES = 40  # ~20 back-and-forth turns per session
+MAX_USER_TURNS = 20  # max user messages per session
 
 
 @app.post("/chat/v2", response_model=ChatResponseV2)
@@ -155,7 +155,8 @@ async def chat_v2(request: Request, body: ChatRequestV2):
 
     try:
         history = get_conversation_history(body.thread_id)
-        if len(history) >= MAX_THREAD_MESSAGES:
+        user_turns = sum(1 for m in history if m["role"] == "user")
+        if user_turns >= MAX_USER_TURNS:
             return ChatResponseV2(
                 response=(
                     "We've had quite the gallery tour! This session has reached its limit. "
