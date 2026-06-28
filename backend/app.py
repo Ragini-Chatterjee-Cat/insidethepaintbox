@@ -11,7 +11,6 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import os
-import secrets
 import traceback
 from datetime import datetime
 from dotenv import load_dotenv
@@ -24,7 +23,6 @@ import db
 from rag import index_documents, get_collection_stats
 from document_loader import load_all_artworks, load_about_page
 from agent import chat_with_memory, get_conversation_history, clear_conversation
-from agent.nodes import PREFS_DIR
 
 
 limiter = Limiter(key_func=get_remote_address)
@@ -228,49 +226,6 @@ async def reindex_documents():
 async def get_stats():
     """Get statistics about the indexed documents"""
     return get_collection_stats()
-
-
-# ---------------------------------------------------------------------------
-# Admin helpers
-# ---------------------------------------------------------------------------
-
-ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")
-
-def _check_admin(request: Request):
-    auth = request.headers.get("Authorization", "")
-    if not ADMIN_TOKEN or not auth.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    token = auth[7:]
-    if not secrets.compare_digest(token, ADMIN_TOKEN):
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
-
-@app.get("/admin/pending")
-async def get_pending_commissions(request: Request):
-    """Return all unreviewed commission requests (admin only)."""
-    _check_admin(request)
-    return {"commissions": db.get_pending_commissions(PREFS_DIR)}
-
-
-@app.post("/admin/respond/{thread_id}")
-async def respond_to_commission(thread_id: str, request: Request):
-    """Send Ragini's personal reply back into the visitor's chat thread (admin only)."""
-    _check_admin(request)
-    body = await request.json()
-    message = body.get("message", "").strip()
-    if not message:
-        raise HTTPException(status_code=400, detail="message is required")
-    db.save_commission_reply(thread_id, message, PREFS_DIR)
-    return {"status": "sent", "thread_id": thread_id}
-
-
-@app.get("/chat/updates/{thread_id}")
-async def poll_for_reply(thread_id: str):
-    """Visitor polls this to check whether Ragini has replied to their commission."""
-    reply = db.get_commission_reply(thread_id, PREFS_DIR)
-    if reply:
-        return {"has_reply": True, "message": reply["message"]}
-    return {"has_reply": False}
 
 
 # Run with: uvicorn app:app --reload --port 8000

@@ -4,6 +4,8 @@ Falls back to JSON files on disk when POSTGRES_URI is not set (local dev)."""
 import json
 import logging
 import os
+import smtplib
+from email.mime.text import MIMEText
 from datetime import datetime
 from pathlib import Path
 
@@ -50,13 +52,6 @@ def setup_tables():
             created_at TIMESTAMPTZ NOT NULL
         )
     """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS commission_replies (
-            thread_id TEXT PRIMARY KEY,
-            message TEXT NOT NULL,
-            created_at TIMESTAMPTZ DEFAULT NOW()
-        )
-    """)
 
 
 def load_user_prefs(thread_id: str, prefs_dir: Path) -> dict:
@@ -89,6 +84,25 @@ def save_user_prefs(thread_id: str, prefs: dict, prefs_dir: Path):
     (prefs_dir / f"{thread_id}.json").write_text(json.dumps(prefs, indent=2))
 
 
+def _send_commission_email(summary: str, thread_id: str):
+    gmail_user = os.environ.get("GMAIL_USER")
+    gmail_password = os.environ.get("GMAIL_APP_PASSWORD")
+    if not gmail_user or not gmail_password:
+        logging.warning("Commission email not sent: GMAIL_USER or GMAIL_APP_PASSWORD not set")
+        return
+    try:
+        msg = MIMEText(f"New commission request:\n\n{summary}\n\nThread ID: {thread_id}")
+        msg["Subject"] = "New Commission - Inside the Paintbox"
+        msg["From"] = gmail_user
+        msg["To"] = gmail_user
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+            smtp.login(gmail_user, gmail_password)
+            smtp.send_message(msg)
+        logging.info(f"Commission email sent for thread {thread_id}")
+    except Exception as e:
+        logging.warning(f"Commission email failed: {e}")
+
+
 def save_commission(thread_id: str, summary: str, timestamp: str, prefs_dir: Path):
     conn = _get_conn()
     if conn:
@@ -99,78 +113,14 @@ def save_commission(thread_id: str, summary: str, timestamp: str, prefs_dir: Pat
                 ON CONFLICT (thread_id) DO UPDATE
                     SET summary = EXCLUDED.summary
             """, (thread_id, summary, timestamp))
-            return
         except Exception as e:
             logging.warning(f"save_commission DB error: {e}")
-    (prefs_dir / f"{thread_id}_commission.json").write_text(json.dumps({
-        "thread_id": thread_id,
-        "summary": summary,
-        "timestamp": timestamp,
-    }))
+    else:
+        (prefs_dir / f"{thread_id}_commission.json").write_text(json.dumps({
+            "thread_id": thread_id,
+            "summary": summary,
+            "timestamp": timestamp,
+        }))
+    _send_commission_email(summary, thread_id)
 
 
-def get_pending_commissions(prefs_dir: Path) -> list:
-    conn = _get_conn()
-    if conn:
-        try:
-            rows = conn.execute("""
-                SELECT c.thread_id, c.summary, c.created_at
-                FROM commissions c
-                LEFT JOIN commission_replies r ON c.thread_id = r.thread_id
-                WHERE r.thread_id IS NULL
-                ORDER BY c.created_at
-            """).fetchall()
-            return [
-                {"thread_id": r[0], "summary": r[1], "timestamp": r[2].isoformat()}
-                for r in rows
-            ]
-        except Exception as e:
-            logging.warning(f"get_pending_commissions DB error: {e}")
-    commissions = []
-    for f in sorted(prefs_dir.glob("*_commission.json")):
-        try:
-            data = json.loads(f.read_text())
-            if not (prefs_dir / f"{data['thread_id']}_reply.json").exists():
-                commissions.append(data)
-        except Exception:
-            continue
-    return commissions
-
-
-def save_commission_reply(thread_id: str, message: str, prefs_dir: Path):
-    conn = _get_conn()
-    if conn:
-        try:
-            conn.execute("""
-                INSERT INTO commission_replies (thread_id, message, created_at)
-                VALUES (%s, %s, NOW())
-                ON CONFLICT (thread_id) DO UPDATE
-                    SET message = EXCLUDED.message, created_at = NOW()
-            """, (thread_id, message))
-            return
-        except Exception as e:
-            logging.warning(f"save_commission_reply DB error: {e}")
-    (prefs_dir / f"{thread_id}_reply.json").write_text(json.dumps({
-        "thread_id": thread_id,
-        "message": message,
-        "timestamp": datetime.utcnow().isoformat(),
-    }))
-
-
-def get_commission_reply(thread_id: str, prefs_dir: Path) -> dict | None:
-    conn = _get_conn()
-    if conn:
-        try:
-            row = conn.execute(
-                "SELECT message FROM commission_replies WHERE thread_id = %s", (thread_id,)
-            ).fetchone()
-            return {"message": row[0]} if row else None
-        except Exception as e:
-            logging.warning(f"get_commission_reply DB error: {e}")
-    f = prefs_dir / f"{thread_id}_reply.json"
-    if f.exists():
-        try:
-            return json.loads(f.read_text())
-        except Exception:
-            pass
-    return None
