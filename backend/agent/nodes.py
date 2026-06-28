@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from langchain_groq import ChatGroq
+from langchain_anthropic import ChatAnthropic
 from langgraph.prebuilt import ToolNode
 
 import db
@@ -22,35 +22,41 @@ from .prompts import (
 PREFS_DIR = Path(os.environ.get("PREFS_DIR", "./user_prefs"))
 PREFS_DIR.mkdir(parents=True, exist_ok=True)
 
-MAX_HISTORY = 10  # keep last N messages to avoid token limit on Groq free tier
+MAX_HISTORY = 10
 
 
 def _trim(messages: list, n: int = MAX_HISTORY) -> list:
-    return messages[-n:] if len(messages) > n else messages
+    trimmed = messages[-n:] if len(messages) > n else messages
+    # Don't start on a tool result — skip forward to the first HumanMessage
+    # to avoid sending an orphaned ToolMessage without its preceding tool call.
+    for i, msg in enumerate(trimmed):
+        if isinstance(msg, HumanMessage):
+            return trimmed[i:]
+    return trimmed
 
 
 class PaintboxAgent:
     """Encapsulates all graph nodes and their shared LLM instances."""
 
     def __init__(self):
-        api_key = os.environ.get("GROQ_API_KEY")
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
         if not api_key:
-            raise ValueError("GROQ_API_KEY environment variable not set!")
+            raise ValueError("ANTHROPIC_API_KEY environment variable not set!")
 
-        def _make_llm(max_tokens: int) -> ChatGroq:
-            return ChatGroq(
-                model="llama-3.3-70b-versatile",
+        def _make_llm(max_tokens: int) -> ChatAnthropic:
+            return ChatAnthropic(
+                model="claude-haiku-4-5-20251001",
                 api_key=api_key,
                 temperature=0,
                 max_tokens=max_tokens,
                 max_retries=3,
             )
 
-        self._llm_classifier = _make_llm(10)
-        self._llm_main       = _make_llm(512)
-        self._llm_chat       = _make_llm(200)
-        self._llm_commission = _make_llm(300)
-        self._llm_extractor  = _make_llm(150)
+        self._llm_classifier = _make_llm(20)
+        self._llm_main       = _make_llm(1024)
+        self._llm_chat       = _make_llm(512)
+        self._llm_commission = _make_llm(1024)
+        self._llm_extractor  = _make_llm(512)
         self._llm_with_tools = self._llm_main.bind_tools(ARTWORK_TOOLS)
         self._tool_node      = ToolNode(ARTWORK_TOOLS, handle_tool_errors=True)
 

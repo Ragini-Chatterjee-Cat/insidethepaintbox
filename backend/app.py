@@ -133,8 +133,12 @@ async def health_check():
 
 
 
+MAX_MESSAGE_LENGTH = 500   # chars — long prompts signal off-topic abuse
+MAX_THREAD_MESSAGES = 40  # ~20 back-and-forth turns per session
+
+
 @app.post("/chat/v2", response_model=ChatResponseV2)
-@limiter.limit("20/minute")
+@limiter.limit("15/minute")
 async def chat_v2(request: Request, body: ChatRequestV2):
     """Chat endpoint with persistent memory (LangGraph)."""
     if not body.message or not body.message.strip():
@@ -143,7 +147,23 @@ async def chat_v2(request: Request, body: ChatRequestV2):
     if not body.thread_id or not body.thread_id.strip():
         raise HTTPException(status_code=400, detail="thread_id is required")
 
+    if len(body.message) > MAX_MESSAGE_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Message too long (max {MAX_MESSAGE_LENGTH} characters)."
+        )
+
     try:
+        history = get_conversation_history(body.thread_id)
+        if len(history) >= MAX_THREAD_MESSAGES:
+            return ChatResponseV2(
+                response=(
+                    "We've had quite the gallery tour! This session has reached its limit. "
+                    "Feel free to refresh the page to start a fresh conversation."
+                ),
+                thread_id=body.thread_id,
+            )
+
         response = chat_with_memory(body.message, body.thread_id)
         return ChatResponseV2(response=response, thread_id=body.thread_id)
     except Exception as e:

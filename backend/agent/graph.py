@@ -35,10 +35,11 @@ def build_graph():
     postgres_uri = os.environ.get("POSTGRES_URI")
     if postgres_uri:
         try:
-            import psycopg
+            from psycopg_pool import ConnectionPool
             from langgraph.checkpoint.postgres import PostgresSaver
-            conn = psycopg.connect(postgres_uri, autocommit=True)
-            checkpointer = PostgresSaver(conn)
+            # A pool of up to 5 connections; dead connections are replaced automatically.
+            pool = ConnectionPool(postgres_uri, max_size=5, kwargs={"autocommit": True})
+            checkpointer = PostgresSaver(pool)
             checkpointer.setup()
         except Exception as e:
             import logging
