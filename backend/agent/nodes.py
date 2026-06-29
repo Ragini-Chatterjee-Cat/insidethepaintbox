@@ -15,7 +15,6 @@ from .prompts import (
     GALLERY_SYSTEM,
     CLASSIFY_SYSTEM,
     GENERAL_SYSTEM,
-    COMMISSION_INTAKE_SYSTEM,
     EXTRACT_SYSTEM,
 )
 
@@ -74,9 +73,6 @@ class PaintboxAgent:
     # -----------------------------------------------------------------------
 
     def classify(self, state: AgentState) -> dict:
-        if state.get("commission_data", {}).get("in_progress"):
-            return {"intent": "commission"}
-
         messages = _trim(state["messages"])
         last_user = next(
             (m.content for m in reversed(messages) if isinstance(m, HumanMessage)), ""
@@ -134,52 +130,12 @@ class PaintboxAgent:
     # -----------------------------------------------------------------------
 
     def commission_intake(self, state: AgentState) -> dict:
-        messages = state["messages"]
-        commission_data = state.get("commission_data") or {}
-        thread_id = state.get("thread_id", "unknown")
-
-        recent = messages[-8:]
-        history = "\n".join(
-            f"{'Visitor' if isinstance(m, HumanMessage) else 'Assistant'}: {m.content}"
-            for m in recent
-            if isinstance(m, (HumanMessage, AIMessage)) and m.content
-        )
-
-        last_human = next(
-            (m.content for m in reversed(recent) if isinstance(m, HumanMessage) and m.content),
-            "Continue.",
-        )
-        result = self._llm_commission.invoke([
-            SystemMessage(content=COMMISSION_INTAKE_SYSTEM.format(history=history)),
-            HumanMessage(content=last_human),
-        ])
-        text = result.content.strip()
-
-        if text.upper().startswith("COMPLETE:"):
-            summary = text[9:].strip()
-            db.save_commission(thread_id, summary, datetime.utcnow().isoformat(), PREFS_DIR)
-            confirmation = AIMessage(content=(
-                "Thank you so much for sharing those details! I've passed everything on to Ragini — "
-                "she'll be in touch personally via Instagram (@ragini_chatterjee) or email "
-                "(inthepaintbox@gmail.com) within a few days."
-            ))
-            return {
-                "messages": [confirmation],
-                "commission_data": {
-                    "in_progress": False,
-                    "awaiting_review": True,
-                    "summary": summary,
-                },
-            }
-
-        return {
-            "messages": [AIMessage(content=text)],
-            "commission_data": {
-                "in_progress": True,
-                "awaiting_review": False,
-                "summary": commission_data.get("summary", ""),
-            },
-        }
+        reply = AIMessage(content=(
+            "I'd love to help you get a commission started! You can fill in all the details "
+            "on Ragini's commissions page: "
+            "https://insidethepaintbox.netlify.app/pages/commissions.html"
+        ))
+        return {"messages": [reply]}
 
     # -----------------------------------------------------------------------
     # Node: extract_preferences
