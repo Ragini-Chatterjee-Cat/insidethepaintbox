@@ -266,7 +266,8 @@ class HyperplaneGame {
 
         // Responsive scale - smaller on mobile, larger on desktop
         // Base scale on canvas size for consistency
-        const baseScale = Math.min(width, height) / 10;
+        const padding = 30;
+        const baseScale = Math.min(width - padding * 2, height - padding * 2) / 10;
         const scale = baseScale * 1.4;
 
         // Convert degrees to radians
@@ -306,6 +307,16 @@ class HyperplaneGame {
 
         // Clear canvas
         ctx.clearRect(0, 0, width, height);
+
+        // Clip all drawing to the canvas bounds (prevents bleed past border-radius)
+        ctx.save();
+        ctx.beginPath();
+        if (ctx.roundRect) {
+            ctx.roundRect(0, 0, width, height, 10);
+        } else {
+            ctx.rect(0, 0, width, height);
+        }
+        ctx.clip();
 
         // Draw axes
         this.drawAxes(ctx, canvas);
@@ -354,6 +365,8 @@ class HyperplaneGame {
         // Reset shadow
         ctx.shadowColor = 'transparent';
         ctx.shadowBlur = 0;
+
+        ctx.restore();
     }
 
     drawAxes(ctx, canvas) {
