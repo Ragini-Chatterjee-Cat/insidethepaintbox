@@ -7,7 +7,7 @@ from pathlib import Path
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_anthropic import ChatAnthropic
 from langgraph.prebuilt import ToolNode
-
+#What is db for 
 import db
 from tools import ARTWORK_TOOLS
 from .state import AgentState

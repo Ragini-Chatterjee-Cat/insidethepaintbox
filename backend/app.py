@@ -22,6 +22,7 @@ load_dotenv()
 import db
 from rag import index_documents, get_collection_stats
 from document_loader import load_all_artworks, load_about_page
+# Here this clear_conversation only gets rid of the prefferences 
 from agent import chat_with_memory, get_conversation_history, clear_conversation
 
 

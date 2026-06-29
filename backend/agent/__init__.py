@@ -1,5 +1,7 @@
 """Paintbox LangGraph agent package."""
+# C'est quoi 
 from pathlib import Path
+# Porquoi pas le list par python
 from typing import List
 
 from langchain_core.messages import AIMessage, HumanMessage
@@ -9,11 +11,16 @@ from .nodes import PREFS_DIR
 
 
 def chat_with_memory(message: str, thread_id: str) -> str:
+    import logging
     config = {"configurable": {"thread_id": thread_id}}
-    result = compiled_graph.invoke(
-        {"messages": [HumanMessage(content=message)], "thread_id": thread_id},
-        config=config,
-    )
+    try:
+        result = compiled_graph.invoke(
+            {"messages": [HumanMessage(content=message)], "thread_id": thread_id},
+            config=config,
+        )
+    except Exception as e:
+        logging.error(f"Graph invoke failed for thread {thread_id}: {type(e).__name__}: {e}")
+        raise
     for msg in reversed(result["messages"]):
         if isinstance(msg, AIMessage) and msg.content:
             return msg.content

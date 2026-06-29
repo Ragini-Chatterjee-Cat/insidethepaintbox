@@ -193,10 +193,15 @@ document.addEventListener('DOMContentLoaded', function() {
      * Convert URLs in text to clickable links
      */
     function linkifyText(text) {
-        const urlRegex = /(https?:\/\/[^\s]+)/g;
-        return text.replace(urlRegex, (url) => {
-            return `<a href="${url}" target="_blank" class="chat-link-btn">Click here</a>`;
+        // Handle markdown links [text](url) first
+        text = text.replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g, (_, label, url) => {
+            return `<a href="${url}" target="_blank" class="chat-link-btn">${label}</a>`;
         });
+        // Then handle plain URLs
+        text = text.replace(/(https?:\/\/[^\s<]+)/g, (url) => {
+            return `<a href="${url}" target="_blank" class="chat-link-btn">View here</a>`;
+        });
+        return text;
     }
 
     /**

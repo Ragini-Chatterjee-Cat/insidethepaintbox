@@ -583,6 +583,7 @@
     <button class="tab"        onclick="show('tools',     this)">Tools</button>
     <button class="tab"        onclick="show('memory',    this)">Memory</button>
     <button class="tab"        onclick="show('commission',this)">Commission</button>
+    <button class="tab"        onclick="show('code',      this)">Code</button>
 </div>
 <div class="tab-border"></div>
 
@@ -1121,6 +1122,240 @@
 
     </div>
 
+</section>
+
+
+<!-- ══════════════════════════ CODE WALKTHROUGH ══════════════════════════ -->
+<section class="section" id="code">
+
+    <p class="section-heading">File-by-file code walkthrough — click any file to expand</p>
+
+    <div class="flow">
+
+        <!-- app.py -->
+        <div class="flow-node" onclick="tog(this)">
+            <div class="fn-header">
+                <div class="fn-num" style="background:#faeee8;color:var(--terracotta)">📄</div>
+                <div class="fn-name">backend/app.py — FastAPI server &amp; entry point</div>
+                <span class="chip chip-terra fn-badge">Railway runs this</span>
+            </div>
+            <div class="fn-detail">
+                <strong>What it does:</strong> Defines all HTTP endpoints and wires together every module at startup.<br><br>
+                <strong>Key lines:</strong><br><br>
+                <code>load_dotenv()</code> — reads <code>.env</code> file locally; on Railway, env vars are injected directly.<br><br>
+                <code>@asynccontextmanager async def lifespan(app)</code> — runs on startup: calls <code>load_all_artworks()</code> and <code>index_documents()</code> so ChromaDB is populated before the first request arrives. Runs on shutdown to log "shutting down".<br><br>
+                <code>Limiter(key_func=get_remote_address)</code> — rate limiter keyed by visitor IP, enforced via the <code>slowapi</code> library.<br><br>
+                <code>app.add_middleware(CORSMiddleware, allow_origins=[...])</code> — whitelists Netlify and localhost so browsers don't block cross-origin requests to Railway.<br><br>
+                <code>MAX_MESSAGE_LENGTH = 500</code> — rejects messages longer than 500 characters to prevent abuse.<br><br>
+                <code>MAX_USER_TURNS = 20</code> — counts how many times the visitor (not the bot) has sent a message in this thread; soft-caps at 20 turns.<br><br>
+                <code>POST /chat/v2</code> — main chat endpoint. Validates the message → checks turn limit → calls <code>chat_with_memory()</code> → returns the AI response as JSON.<br><br>
+                <code>GET /chat/history/{thread_id}</code> — returns the full conversation history for a thread (used on page load to restore chat).<br><br>
+                <code>DELETE /chat/history/{thread_id}</code> — clears conversation (visitor starts fresh).<br><br>
+                <code>POST /reindex</code> — re-scrapes all artwork HTML files and rebuilds ChromaDB without restarting the server.<br><br>
+                <code>GET /stats</code> — returns how many documents are indexed in ChromaDB.
+            </div>
+        </div>
+        <div class="flow-conn"><div class="conn-line"></div></div>
+
+        <!-- rag.py -->
+        <div class="flow-node" onclick="tog(this)">
+            <div class="fn-header">
+                <div class="fn-num" style="background:#e8f0f7;color:var(--blue)">📄</div>
+                <div class="fn-name">backend/rag.py — RAG pipeline (embed → retrieve → generate)</div>
+                <span class="chip chip-blue fn-badge">ChromaDB + Claude</span>
+            </div>
+            <div class="fn-detail">
+                <strong>What it does:</strong> Manages the vector database and the two-step AI generation used for artwork questions.<br><br>
+                <strong>Module-level (runs once at import):</strong><br>
+                <code>SentenceTransformer('all-MiniLM-L6-v2')</code> — loads the embedding model into memory. Runs locally on Railway, free, converts text to 384-dimension vectors.<br>
+                <code>chromadb.PersistentClient(path="./chroma_db")</code> — opens (or creates) the ChromaDB database on disk.<br>
+                <code>collection = chroma_client.get_or_create_collection("artworks")</code> — the single collection storing all artwork documents.<br><br>
+                <strong>Functions:</strong><br><br>
+                <code>get_anthropic_client()</code> — reads <code>ANTHROPIC_API_KEY</code> from env, returns an <code>anthropic.Anthropic</code> client. Raises if key is missing.<br><br>
+                <code>index_documents(documents)</code> — clears the existing collection then re-adds every document. For each doc: calls <code>embedding_model.encode(content)</code> to get a vector, then <code>collection.add()</code> with the vector + metadata (title, series, URL).<br><br>
+                <code>search_similar(query, n_results=3)</code> — embeds the query string, calls <code>collection.query()</code> to find the closest documents by cosine distance, returns a list of dicts with content + metadata + distance score.<br><br>
+                <code>generate_response(question, context_docs, conversation_history)</code> — two-step Chain-of-Thought:<br>
+                &nbsp;&nbsp;<strong>Step 1 (Reasoning):</strong> sends the question + context + conversation history to Claude Haiku and asks it to reason about what the user wants (max 300 tokens).<br>
+                &nbsp;&nbsp;<strong>Step 2 (Response):</strong> sends the reasoning output + context to Claude Haiku to generate the final warm gallery-guide reply (max 250 tokens).<br>
+                Documents with distance &gt; 1.5 are filtered as low-confidence before either step.<br><br>
+                <code>build_search_query(question, conversation_history)</code> — appends the last 2 user messages to the current question to help ChromaDB resolve follow-up references like "tell me more about it".<br><br>
+                <code>query_rag(question, conversation_history)</code> — the public entry point: calls <code>build_search_query</code> → <code>search_similar</code> → <code>generate_response</code>.<br><br>
+                <code>get_collection_stats()</code> — returns document count and collection name; used by the <code>/health</code> and <code>/stats</code> endpoints.
+            </div>
+        </div>
+        <div class="flow-conn"><div class="conn-line"></div></div>
+
+        <!-- db.py -->
+        <div class="flow-node" onclick="tog(this)">
+            <div class="fn-header">
+                <div class="fn-num" style="background:#e8f4ec;color:var(--sage)">📄</div>
+                <div class="fn-name">backend/db.py — Postgres persistence + email</div>
+                <span class="chip chip-sage fn-badge">Storage layer</span>
+            </div>
+            <div class="fn-detail">
+                <strong>What it does:</strong> All database reads/writes and the commission email notification. Falls back to JSON files when Postgres isn't configured.<br><br>
+                <code>_get_conn()</code> — checks if <code>POSTGRES_URI</code> is set. If yes, opens a psycopg connection (reuses it if still alive). Returns <code>None</code> if no URI → triggers JSON fallback in every function.<br><br>
+                <code>setup_tables()</code> — called on startup by <code>app.py</code>. Creates <code>user_prefs</code> and <code>commissions</code> tables if they don't exist (PostgreSQL <code>CREATE TABLE IF NOT EXISTS</code>).<br><br>
+                <code>load_user_prefs(thread_id, prefs_dir)</code> — tries Postgres first (<code>SELECT prefs FROM user_prefs WHERE thread_id = %s</code>); falls back to reading <code>prefs_dir/{thread_id}.json</code>.<br><br>
+                <code>save_user_prefs(thread_id, prefs, prefs_dir)</code> — upserts into Postgres (<code>INSERT … ON CONFLICT DO UPDATE</code>); falls back to writing the JSON file.<br><br>
+                <code>_send_commission_email(summary, thread_id)</code> — reads <code>GMAIL_USER</code> and <code>GMAIL_APP_PASSWORD</code> from env. Builds a plain-text email with the commission summary, connects to <code>smtp.gmail.com:465</code> with SSL, logs in with the App Password, and sends the email from and to <code>GMAIL_USER</code>. Silently logs a warning if the env vars aren't set.<br><br>
+                <code>save_commission(thread_id, summary, timestamp, prefs_dir)</code> — saves the commission to Postgres (or JSON fallback), then always calls <code>_send_commission_email()</code> at the end regardless of which storage path was used.
+            </div>
+        </div>
+        <div class="flow-conn"><div class="conn-line"></div></div>
+
+        <!-- document_loader.py -->
+        <div class="flow-node" onclick="tog(this)">
+            <div class="fn-header">
+                <div class="fn-num" style="background:#fdf5e2;color:var(--honey)">📄</div>
+                <div class="fn-name">backend/document_loader.py — HTML scraper</div>
+                <span class="chip chip-honey fn-badge">Startup only</span>
+            </div>
+            <div class="fn-detail">
+                <strong>What it does:</strong> Scrapes all artwork HTML pages into plain-text documents that can be indexed into ChromaDB.<br><br>
+                <code>SERIES_ARTWORK_MAP</code> — hardcoded dict mapping each series name to its list of HTML filenames. 8 series, 42 artworks total. Used by <code>filter_by_series</code> tool as fallback.<br><br>
+                <code>_ARTWORK_TO_SERIES</code> — reverse lookup built at import time: filename → series name. Used by <code>get_artwork_series()</code>.<br><br>
+                <code>clean_text(text)</code> — strips extra whitespace and newlines with <code>re.sub(r'\s+', ' ', text)</code>.<br><br>
+                <code>get_artwork_url(html_path, website_path)</code> — turns a local file path like <code>frontend/artworks/mythical/icarus.html</code> into its public Netlify URL.<br><br>
+                <code>load_artwork_from_html(html_path, website_path)</code> — opens an HTML file with BeautifulSoup, extracts: <code>&lt;h1&gt;</code> (title), <code>&lt;h6&gt;</code> (subtitle/dimensions), <code>&lt;p&gt;</code> tags (description), <code>&lt;h2&gt;</code> tags (section headings like "INSPIRATION"). Combines everything into a single <code>content</code> string that includes the URL so the chatbot can reference it.<br><br>
+                <code>load_all_artworks(website_path)</code> — globs <code>artworks/**/*.html</code> recursively and <code>pages/series/*.html</code>, calls <code>load_artwork_from_html</code> on each file, returns a list of document dicts.<br><br>
+                <code>load_about_page(website_path)</code> — loads <code>pages/about.html</code> specifically so the bot can answer questions about Ragini.
+            </div>
+        </div>
+        <div class="flow-conn"><div class="conn-line"></div></div>
+
+        <!-- agent/state.py -->
+        <div class="flow-node" onclick="tog(this)">
+            <div class="fn-header">
+                <div class="fn-num" style="background:#f2eef9;color:var(--lavender)">📄</div>
+                <div class="fn-name">backend/agent/state.py — LangGraph state schema</div>
+                <span class="chip chip-lavender fn-badge">Data shape</span>
+            </div>
+            <div class="fn-detail">
+                <strong>What it does:</strong> Defines the shape of the data that flows through every node in the graph.<br><br>
+                <code>messages: Annotated[list, add_messages]</code> — the conversation history. <code>add_messages</code> is a LangGraph reducer: instead of replacing the list, each node's returned messages are <em>appended</em> to the existing list. This is what allows multi-turn memory.<br><br>
+                <code>intent: str</code> — set by the <code>classify</code> node to <code>"artwork"</code>, <code>"general"</code>, or <code>"commission"</code>. Read by the conditional edge to route to the right handler.<br><br>
+                <code>user_prefs: dict</code> — loaded from Postgres/JSON at the start of each turn, updated by <code>extract_preferences</code>, saved back by <code>save_preferences</code>.<br><br>
+                <code>thread_id: str</code> — the visitor's UUID, passed through state so nodes can use it without calling the checkpointer directly.<br><br>
+                <code>commission_data: dict</code> — tracks whether a commission collection is in progress (<code>in_progress</code>), completed (<code>awaiting_review</code>), and its running summary. Persisted across turns so the multi-step intake can't be interrupted by a new artwork question.
+            </div>
+        </div>
+        <div class="flow-conn"><div class="conn-line"></div></div>
+
+        <!-- agent/graph.py -->
+        <div class="flow-node" onclick="tog(this)">
+            <div class="fn-header">
+                <div class="fn-num" style="background:#e8f4ec;color:var(--sage)">📄</div>
+                <div class="fn-name">backend/agent/graph.py — LangGraph graph builder</div>
+                <span class="chip chip-sage fn-badge">Wiring</span>
+            </div>
+            <div class="fn-detail">
+                <strong>What it does:</strong> Creates and compiles the LangGraph graph once at import time. The compiled graph is a singleton reused for every request.<br><br>
+                <code>agent = PaintboxAgent()</code> — instantiates all LLM clients and tool nodes. Happens once at startup.<br><br>
+                <code>graph.add_node(...)</code> — registers all 7 nodes. Each node is a method on <code>PaintboxAgent</code>.<br><br>
+                <code>graph.add_conditional_edges("classify", agent.route_intent, {...})</code> — after <code>classify</code> runs, <code>route_intent()</code> reads the <code>intent</code> field from state and returns the name of the next node as a string.<br><br>
+                <code>postgres_uri = os.environ.get("POSTGRES_URI")</code> — if this is set, uses <code>PostgresSaver</code> (persistent across restarts). If not, falls back to <code>MemorySaver</code> (in-memory, lost on restart). The try/except means a bad Postgres URI gracefully falls back instead of crashing.<br><br>
+                <code>compiled_graph = build_graph()</code> — module-level call so the graph is compiled once when Python imports this file.
+            </div>
+        </div>
+        <div class="flow-conn"><div class="conn-line"></div></div>
+
+        <!-- agent/nodes.py -->
+        <div class="flow-node" onclick="tog(this)">
+            <div class="fn-header">
+                <div class="fn-num" style="background:#faeee8;color:var(--terracotta)">📄</div>
+                <div class="fn-name">backend/agent/nodes.py — all node implementations</div>
+                <span class="chip chip-terra fn-badge">Core logic</span>
+            </div>
+            <div class="fn-detail">
+                <strong>What it does:</strong> Every node in the graph is a method on <code>PaintboxAgent</code>. Each method takes <code>state: AgentState</code> and returns a dict of fields to update in state.<br><br>
+                <code>_make_llm(max_tokens)</code> — factory that creates a <code>ChatAnthropic</code> instance with <code>claude-haiku-4-5-20251001</code>, <code>temperature=0</code>, and <code>max_retries=3</code>. Called once per token budget:<br>
+                &nbsp;· <code>_llm_classifier</code> — max 20 tokens (outputs one word)<br>
+                &nbsp;· <code>_llm_main</code> — max 1024 tokens (artwork answers, bound with tools)<br>
+                &nbsp;· <code>_llm_chat</code> — max 512 tokens (general chat)<br>
+                &nbsp;· <code>_llm_commission</code> — max 1024 tokens (intake questions)<br>
+                &nbsp;· <code>_llm_extractor</code> — max 512 tokens (outputs JSON)<br><br>
+                <code>_trim(messages, n=10)</code> — slices the last 10 messages from state before sending to the LLM. Also skips forward past any orphaned ToolMessages so the LLM never receives a tool result without the preceding tool call.<br><br>
+                <code>load_preferences(state)</code> — calls <code>db.load_user_prefs()</code> and returns <code>{"user_prefs": prefs}</code>. No LLM call.<br><br>
+                <code>classify(state)</code> — if a commission is already in progress, short-circuits to <code>"commission"</code>. Otherwise sends just the last user message to <code>_llm_classifier</code> with a strict one-word system prompt.<br><br>
+                <code>react_node(state)</code> — the artwork handler. Prepends <code>GALLERY_SYSTEM</code> + user preferences as system context. Loops up to 5 times: calls <code>_llm_with_tools</code>, if the response contains tool calls executes them via <code>_tool_node</code> and continues, otherwise breaks and returns all accumulated messages.<br><br>
+                <code>general_chat(state)</code> — single LLM call with <code>GENERAL_SYSTEM</code> prompt. No tools.<br><br>
+                <code>commission_intake(state)</code> — passes the last 8 messages to <code>_llm_commission</code> as formatted history. If the LLM response starts with <code>"COMPLETE:"</code>, calls <code>db.save_commission()</code> (which triggers the email) and returns a confirmation message. Otherwise returns the next question and sets <code>commission_data.in_progress = True</code>.<br><br>
+                <code>extract_preferences(state)</code> — sends the last 4 messages to <code>_llm_extractor</code>, parses the JSON output. Merges with existing preferences (caps: 10 series, 20 artworks). Returns <code>{}</code> if JSON parsing fails.<br><br>
+                <code>save_preferences(state)</code> — calls <code>db.save_user_prefs()</code>. No LLM call.
+            </div>
+        </div>
+        <div class="flow-conn"><div class="conn-line"></div></div>
+
+        <!-- agent/prompts.py -->
+        <div class="flow-node" onclick="tog(this)">
+            <div class="fn-header">
+                <div class="fn-num" style="background:#fdf5e2;color:var(--honey)">📄</div>
+                <div class="fn-name">backend/agent/prompts.py — all system prompts</div>
+                <span class="chip chip-honey fn-badge">LLM instructions</span>
+            </div>
+            <div class="fn-detail">
+                <strong>What it does:</strong> Defines the personality and rules for each LLM call as constants.<br><br>
+                <code>GALLERY_SYSTEM</code> — the main artwork prompt. Three critical rules: (1) never name an artwork without a tool result, (2) always call a tool before answering, (3) say honestly if a tool returns nothing. Lists which tool to use for which type of question. Tone: warm, funny, conversational gallery guide.<br><br>
+                <code>CLASSIFY_SYSTEM</code> — a strict one-word classifier. Outputs exactly <code>commission</code>, <code>artwork</code>, or <code>general</code>. No other output allowed.<br><br>
+                <code>GENERAL_SYSTEM</code> — for small talk. 1–3 sentences, warm and brief, gently steers toward the art collection.<br><br>
+                <code>COMMISSION_INTAKE_SYSTEM</code> — templated with <code>{history}</code>. Instructs the LLM to collect 6 pieces of info one question at a time, in a warm conversational tone. Contact details are required before the request can be filed. When all info is collected, the LLM must output exactly <code>COMPLETE: &lt;summary&gt;</code> — this format is what <code>commission_intake</code> node detects to trigger saving.<br><br>
+                <code>EXTRACT_SYSTEM</code> — instructs the LLM to output only a JSON object with <code>liked_series</code>, <code>mentioned_artworks</code>, and <code>tone</code>. Strict format prevents extra text that would break <code>json.loads()</code>.
+            </div>
+        </div>
+        <div class="flow-conn"><div class="conn-line"></div></div>
+
+        <!-- tools/base.py -->
+        <div class="flow-node" onclick="tog(this)">
+            <div class="fn-header">
+                <div class="fn-num" style="background:#e8f0f7;color:var(--blue)">📄</div>
+                <div class="fn-name">backend/tools/base.py — shared constants for all tools</div>
+                <span class="chip chip-blue fn-badge">Shared config</span>
+            </div>
+            <div class="fn-detail">
+                <strong>What it does:</strong> Imports the ChromaDB collection and embedding model from <code>rag.py</code> so all tools share the same singletons without re-initialising them.<br><br>
+                <code>BASE_URL</code> — the Netlify URL, used to build artwork and series page links.<br><br>
+                <code>CONFIDENCE_THRESHOLD = 1.5</code> — ChromaDB distance above which a result is considered too low-confidence to show. Used by <code>search_artworks</code> to filter out irrelevant results.<br><br>
+                <code>SERIES_URLS</code> — hardcoded dict of series name → series page URL. This is the source of truth for series links; the LLM never guesses a URL.<br><br>
+                <code>COMMISSION_INFO</code> — static text block about commissions, returned by the <code>get_commission_info</code> tool without any DB call.
+            </div>
+        </div>
+        <div class="flow-conn"><div class="conn-line"></div></div>
+
+        <!-- tools/ -->
+        <div class="flow-node" onclick="tog(this)">
+            <div class="fn-header">
+                <div class="fn-num" style="background:#faeee8;color:var(--terracotta)">📄</div>
+                <div class="fn-name">backend/tools/ — 5 LangChain tools</div>
+                <span class="chip chip-terra fn-badge">ReAct loop</span>
+            </div>
+            <div class="fn-detail">
+                Each tool is a <code>BaseTool</code> subclass with a <code>name</code>, <code>description</code> (what the LLM reads to decide when to call it), an <code>args_schema</code> (Pydantic model defining inputs), and a <code>_run()</code> method.<br><br>
+                <strong>search_artworks.py</strong> — encodes the query with <code>embedding_model.encode()</code>, queries ChromaDB for top 5 results, filters out any with distance &gt; 1.5, formats each as title + series + URL + 200-char snippet.<br><br>
+                <strong>filter_by_series.py</strong> — case-insensitive match against <code>SERIES_ARTWORK_MAP</code> keys. Queries ChromaDB filtered by <code>{"series": matched_series}</code>. Falls back to the hardcoded filename list if ChromaDB has no indexed data yet. Always includes the series page URL from <code>SERIES_URLS</code>.<br><br>
+                <strong>get_artwork_details.py</strong> — embeds the artwork name, queries ChromaDB for top 3, then picks the result whose title most closely matches the input string (exact substring match preferred over pure vector distance). Returns full content + series + URL.<br><br>
+                <strong>commission_info.py</strong> — returns the static <code>COMMISSION_INFO</code> string from <code>base.py</code>. No arguments, no DB call. Used when a visitor asks general questions about commissioning before starting the intake flow.<br><br>
+                <strong>recommend_similar.py</strong> — two-step: first finds the source artwork's full document text using <code>get_artwork_details</code> logic, then embeds the <em>full content</em> (not just the title) and queries ChromaDB for the 5 most similar documents, excluding the source artwork itself. Returns up to 4 recommendations.
+            </div>
+        </div>
+        <div class="flow-conn"><div class="conn-line"></div></div>
+
+        <!-- agent/__init__.py -->
+        <div class="flow-node" onclick="tog(this)">
+            <div class="fn-header">
+                <div class="fn-num" style="background:#e8f4ec;color:var(--sage)">📄</div>
+                <div class="fn-name">backend/agent/__init__.py — public interface for the agent</div>
+                <span class="chip chip-sage fn-badge">Called by app.py</span>
+            </div>
+            <div class="fn-detail">
+                <strong>What it does:</strong> Exposes three clean functions to <code>app.py</code> so it never needs to import LangGraph internals directly.<br><br>
+                <code>chat_with_memory(message, thread_id)</code> — wraps <code>compiled_graph.invoke()</code>. Passes the new <code>HumanMessage</code> and the thread config, then walks the returned messages in reverse to find the last <code>AIMessage</code> with content. Returns the fallback string <code>"I'm sorry, I couldn't generate a response"</code> only if no AIMessage is found.<br><br>
+                <code>get_conversation_history(thread_id)</code> — calls <code>compiled_graph.get_state(config)</code> to read the checkpoint without invoking the graph. Filters the message list to return only <code>HumanMessage</code> and non-empty <code>AIMessage</code> entries as plain dicts with <code>role</code> and <code>content</code>.<br><br>
+                <code>clear_conversation(thread_id)</code> — deletes the <code>user_prefs/{thread_id}.json</code> file. Note: the LangGraph checkpoint itself (in Postgres or memory) is not deleted here — only the extracted preferences file.
+            </div>
+        </div>
+
+    </div>
 </section>
 
 

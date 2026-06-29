@@ -1,5 +1,6 @@
 """AgentState schema for the Paintbox LangGraph agent."""
 from typing import Annotated, TypedDict
+# Can you tell me again what this does 
 from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 
