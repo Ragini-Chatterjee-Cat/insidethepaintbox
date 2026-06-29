@@ -267,7 +267,7 @@ class HyperplaneGame {
         // Responsive scale - smaller on mobile, larger on desktop
         // Base scale on canvas size for consistency
         const baseScale = Math.min(width, height) / 10;
-        const scale = baseScale *1.8; // Slight zoom out to ensure all points visible
+        const scale = baseScale * 1.4;
 
         // Convert degrees to radians
         const radX = this.rotationX * Math.PI / 180;
@@ -357,7 +357,7 @@ class HyperplaneGame {
     }
 
     drawAxes(ctx, canvas) {
-        const axisLength = 2.5;
+        const axisLength = 2.0;
         const axes = [
             { start: [-axisLength, 0, 0], end: [axisLength, 0, 0], label: 'X', color: 'rgba(244, 233, 213, 0.5)' },
             { start: [0, -axisLength, 0], end: [0, axisLength, 0], label: 'Y', color: 'rgba(244, 233, 213, 0.5)' },
@@ -389,15 +389,15 @@ class HyperplaneGame {
         ctx.lineWidth = 0.5;
 
         for (let i = -2; i <= 2; i++) {
-            const p1 = this.project3D(i, -2.5, 0, canvas);
-            const p2 = this.project3D(i, 2.5, 0, canvas);
+            const p1 = this.project3D(i, -2.0, 0, canvas);
+            const p2 = this.project3D(i, 2.0, 0, canvas);
             ctx.beginPath();
             ctx.moveTo(p1.x, p1.y);
             ctx.lineTo(p2.x, p2.y);
             ctx.stroke();
 
-            const p3 = this.project3D(-2.5, i, 0, canvas);
-            const p4 = this.project3D(2.5, i, 0, canvas);
+            const p3 = this.project3D(-2.0, i, 0, canvas);
+            const p4 = this.project3D(2.0, i, 0, canvas);
             ctx.beginPath();
             ctx.moveTo(p3.x, p3.y);
             ctx.lineTo(p4.x, p4.y);
