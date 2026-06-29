@@ -110,7 +110,6 @@ class HyperplaneGame {
 
     init() {
         this.setupCanvas();
-        this.render();
         this.renderStats();
         this.renderDataTable();
         this.renderMessage();
@@ -178,8 +177,12 @@ class HyperplaneGame {
     setupCanvas() {
         const canvas3d = document.getElementById('plot3d');
         if (canvas3d) {
-            // Set canvas resolution based on display size
-            this.resizeCanvas(canvas3d);
+            // Defer initial resize to next animation frame so CSS layout
+            // (height: auto + aspect-ratio) is fully computed first
+            requestAnimationFrame(() => {
+                this.resizeCanvas(canvas3d);
+                this.render();
+            });
 
             // Handle window resize
             window.addEventListener('resize', () => {
