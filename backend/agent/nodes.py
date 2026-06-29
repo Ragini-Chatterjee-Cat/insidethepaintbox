@@ -145,8 +145,13 @@ class PaintboxAgent:
             if isinstance(m, (HumanMessage, AIMessage)) and m.content
         )
 
+        last_human = next(
+            (m.content for m in reversed(recent) if isinstance(m, HumanMessage) and m.content),
+            "Continue.",
+        )
         result = self._llm_commission.invoke([
-            SystemMessage(content=COMMISSION_INTAKE_SYSTEM.format(history=history))
+            SystemMessage(content=COMMISSION_INTAKE_SYSTEM.format(history=history)),
+            HumanMessage(content=last_human),
         ])
         text = result.content.strip()
 
