@@ -37,8 +37,24 @@ def build_graph():
         try:
             from psycopg_pool import ConnectionPool
             from langgraph.checkpoint.postgres import PostgresSaver
-            # A pool of up to 5 connections; dead connections are replaced automatically.
-            pool = ConnectionPool(postgres_uri, max_size=5, kwargs={"autocommit": True})
+            # A pool of up to 5 connections. `check` validates a connection before
+            # handing it out (reconnecting if the DB/network silently dropped it while
+            # idle) instead of only discovering it's dead when a real query fails.
+            # `max_idle` proactively recycles idle connections before that can happen.
+            # Keepalives detect a dead peer at the TCP level faster than the default.
+            pool = ConnectionPool(
+                postgres_uri,
+                max_size=5,
+                kwargs={
+                    "autocommit": True,
+                    "keepalives": 1,
+                    "keepalives_idle": 30,
+                    "keepalives_interval": 10,
+                    "keepalives_count": 3,
+                },
+                check=ConnectionPool.check_connection,
+                max_idle=300,
+            )
             checkpointer = PostgresSaver(pool)
             checkpointer.setup()
         except Exception as e:

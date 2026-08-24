@@ -621,7 +621,7 @@
                 Python FastAPI server, Docker deployed.<br><br>
                 Runs the LangGraph agent + RAG pipeline. Stores conversation history via
                 PostgreSQL (or in-memory fallback). User preferences saved in Postgres or JSON files.
-                Sends commission emails via Gmail SMTP.
+                Commission requests are handed off to a link — no email is sent from the backend.
             </div>
             <br><span class="chip chip-blue">Docker deploy</span>
         </div>
@@ -638,8 +638,9 @@
             <div class="name">Anthropic API</div>
             <div class="desc">
                 Hosts <strong>Claude Haiku 4.5</strong>.<br><br>
-                Used for intent classification, ReAct tool-calling loop, commission intake,
-                preference extraction, RAG generation, and general chat.
+                Used for intent classification, ReAct tool-calling loop,
+                preference extraction, RAG generation, and general chat. Commission questions
+                get a static reply with no LLM call.
             </div>
             <br><span class="chip chip-lavender">Pay-per-token</span>
         </div>
@@ -651,7 +652,7 @@
             <div class="step"><div class="step-n">1</div><div>Chat widget sends the message + <code>thread_id</code> to Railway via <code>POST /chat/v2</code>.</div></div>
             <div class="step"><div class="step-n">2</div><div>FastAPI calls <code>chat_with_memory()</code> → the compiled LangGraph graph is invoked.</div></div>
             <div class="step"><div class="step-n">3</div><div>Graph runs: loads preferences → classifies intent → routes to artwork / general / commission handler → extracts & saves preferences.</div></div>
-            <div class="step"><div class="step-n">4</div><div>Artwork questions trigger the ReAct loop with ChromaDB lookups via Anthropic Claude Haiku. Commission questions start a multi-turn intake conversation.</div></div>
+            <div class="step"><div class="step-n">4</div><div>Artwork questions trigger the ReAct loop with ChromaDB lookups via Anthropic Claude Haiku. Commission questions get a static reply linking to the commissions page.</div></div>
             <div class="step"><div class="step-n">5</div><div>Final AI response is returned to the chat widget. The full trace appears in LangSmith.</div></div>
         </div>
     </div>
@@ -661,8 +662,6 @@
         <div class="card-body">
             <code>ANTHROPIC_API_KEY</code> — Claude API key &nbsp;·&nbsp;
             <code>POSTGRES_URI</code> — PostgreSQL connection string for persistent memory (optional, falls back to in-memory) &nbsp;·&nbsp;
-            <code>GMAIL_USER</code> — Gmail address for commission email notifications &nbsp;·&nbsp;
-            <code>GMAIL_APP_PASSWORD</code> — Gmail App Password (16-char, not your real password) &nbsp;·&nbsp;
             <code>LANGCHAIN_TRACING_V2</code> <code>LANGCHAIN_API_KEY</code> <code>LANGCHAIN_PROJECT</code> — LangSmith observability
         </div>
     </div>
@@ -744,11 +743,8 @@
                 <span class="chip chip-lavender fn-badge">Intent router</span>
             </div>
             <div class="fn-detail">
-                A tiny fast LLM call (<code>max_tokens=10</code>) that labels the message as
+                A tiny fast LLM call (<code>max_tokens=20</code>) that labels the message as
                 <strong>artwork</strong>, <strong>general</strong>, or <strong>commission</strong>.
-                If a commission intake is already in progress (<code>commission_data.in_progress = true</code>),
-                the node short-circuits to "commission" regardless of message content,
-                so multi-turn collection is never interrupted.
             </div>
         </div>
 
@@ -784,9 +780,9 @@
                 <div class="bn-name" style="color:var(--rose)">commission_intake</div>
                 <div class="bn-cond">if intent = "commission"</div>
                 <div class="bn-detail">
-                    Multi-turn collector. Asks for type → subject → occasion → style → timeline → contact.
-                    Only files the request (writes <code>{thread_id}_commission.json</code>) once
-                    contact details are provided. Sends visitor a warm confirmation message.
+                    No LLM call. Returns one static <code>AIMessage</code> pointing the visitor to
+                    the commissions page (<code>/pages/commissions.html</code>) to fill in details
+                    themselves. The old multi-turn collector + auto-email was removed.
                 </div>
             </div>
 
@@ -967,7 +963,7 @@
             <div class="tool-desc">
                 Returns static commission info — no arguments, no DB call. Includes contact links,
                 commission types, and response time. Hardcoded in tools.py.
-                <br><em>Note: the new commission_intake node handles interactive commission requests.</em>
+                <br><em>Note: the commission_intake node just replies with a link to the commissions page — it does not use this tool.</em>
             </div>
             <span class="tool-eg">"How do I commission a piece?"</span>
         </div>
@@ -1021,7 +1017,7 @@
             <div class="mem-bullet">Stores <strong>extracted interests</strong> — not raw messages</div>
             <div class="mem-bullet">Updated after every exchange by <code>extract_preferences</code></div>
             <div class="mem-bullet">Loaded at session start by <code>load_preferences</code>, injected as system context</div>
-            <div class="mem-bullet">Commission requests stored in Postgres <code>commissions</code> table or as <code>{thread_id}_commission.json</code> fallback</div>
+            <div class="mem-bullet">Commission requests are now submitted directly via the commissions page form — the chat agent no longer collects or files them</div>
             <pre class="json">{
   "liked_series": ["Mythical", "Portraits"],
   "mentioned_artworks": ["Icarus", "Voices"],
@@ -1046,7 +1042,7 @@
 <!-- ══════════════════════════ COMMISSION ══════════════════════════ -->
 <section class="section" id="commission">
 
-    <p class="section-heading">Commission flow — collect details → email notification</p>
+    <p class="section-heading">Commission flow — chat hands off to the commissions page</p>
 
     <div class="comm-journey">
 
@@ -1072,54 +1068,37 @@
             </svg>
         </div>
 
-        <!-- Step 2: Bot collects -->
+        <!-- Step 2: Bot hands off -->
         <div class="comm-step">
-            <div class="cs-icon">✏️</div>
+            <div class="cs-icon">🔗</div>
             <div>
-                <div class="cs-title">Bot collects details, one question at a time</div>
-                <div class="cs-body">The intake node gathers all required info across multiple turns:</div>
-                <ul class="q-list">
-                    <li>Type of piece — portrait, pet portrait, illustration, or card</li>
-                    <li>Subject — who or what the piece is of</li>
-                    <li>Occasion or purpose — gift, keepsake, event</li>
-                    <li>Style preferences — or browse existing series for reference</li>
-                    <li>Timeline — any deadline or flexible?</li>
-                    <li><strong>Contact details — email or Instagram handle (required before filing)</strong></li>
-                </ul>
-            </div>
-        </div>
-
-        <div class="comm-arrow">
-            <div class="ca-line"></div>
-            <svg viewBox="0 0 24 24" fill="none">
-                <path d="M12,4 L12,18 M6,13 L12,19 L18,13" stroke="#2c1810" stroke-width="2" stroke-linecap="round"/>
-            </svg>
-        </div>
-
-        <!-- Step 3: Request filed + email -->
-        <div class="comm-step">
-            <div class="cs-icon">📧</div>
-            <div>
-                <div class="cs-title">Request filed + email sent to Ragini</div>
+                <div class="cs-title">Bot replies with a link — no collection, no LLM call</div>
                 <div class="cs-body">
-                    Once contact details are collected, <code>db.save_commission()</code> saves the request
-                    to Postgres (or a JSON file fallback) and immediately calls <code>_send_commission_email()</code>.<br><br>
-                    Gmail SMTP sends an email to <code>inthepaintbox@gmail.com</code> with the full summary.
-                    The visitor receives a warm confirmation in the chat:
+                    <code>commission_intake(state)</code> no longer asks any questions or calls an LLM.
+                    It returns one fixed <code>AIMessage</code> pointing the visitor to the commissions
+                    page, where they fill in the details themselves via a form:
                 </div>
                 <br>
                 <span class="bubble bubble-bot">
-                    "Thank you so much! I've passed everything on to Ragini — she'll be in touch
-                    via Instagram or email within a few days."
+                    "I'd love to help you get a commission started! You can fill in all the details
+                    on Ragini's commissions page: https://insidethepaintbox.netlify.app/pages/commissions.html"
                 </span>
-                <br>
-                <div class="cs-body" style="margin-top:10px">
-                    Ragini follows up directly via the visitor's provided contact details (email or Instagram handle).
-                    Requires <code>GMAIL_USER</code> + <code>GMAIL_APP_PASSWORD</code> env vars on Railway.
-                </div>
             </div>
         </div>
 
+    </div>
+
+    <div class="card card-rose" style="margin-top:20px">
+        <div class="card-title">What changed</div>
+        <div class="card-body">
+            The old multi-turn intake (ask type → subject → occasion → style → timeline → contact, then
+            <code>db.save_commission()</code> + Gmail SMTP notification) was removed in favor of a direct
+            link to the standalone commissions page. The now-dead supporting code was deleted along with it:
+            the <code>COMMISSION_INTAKE_SYSTEM</code> prompt, the <code>_llm_commission</code> LLM instance,
+            the <code>commission_data</code> state field, and <code>db.save_commission()</code> /
+            <code>_send_commission_email()</code> (including the unused <code>commissions</code> table creation
+            and the now-unneeded <code>GMAIL_USER</code> / <code>GMAIL_APP_PASSWORD</code> env vars).
+        </div>
     </div>
 
 </section>
@@ -1189,17 +1168,16 @@
         <div class="flow-node" onclick="tog(this)">
             <div class="fn-header">
                 <div class="fn-num" style="background:#e8f4ec;color:var(--sage)">📄</div>
-                <div class="fn-name">backend/db.py — Postgres persistence + email</div>
+                <div class="fn-name">backend/db.py — Postgres persistence</div>
                 <span class="chip chip-sage fn-badge">Storage layer</span>
             </div>
             <div class="fn-detail">
-                <strong>What it does:</strong> All database reads/writes and the commission email notification. Falls back to JSON files when Postgres isn't configured.<br><br>
+                <strong>What it does:</strong> Reads/writes visitor preferences. Falls back to JSON files when Postgres isn't configured.<br><br>
                 <code>_get_conn()</code> — checks if <code>POSTGRES_URI</code> is set. If yes, opens a psycopg connection (reuses it if still alive). Returns <code>None</code> if no URI → triggers JSON fallback in every function.<br><br>
-                <code>setup_tables()</code> — called on startup by <code>app.py</code>. Creates <code>user_prefs</code> and <code>commissions</code> tables if they don't exist (PostgreSQL <code>CREATE TABLE IF NOT EXISTS</code>).<br><br>
+                <code>setup_tables()</code> — called on startup by <code>app.py</code>. Creates the <code>user_prefs</code> table if it doesn't exist (PostgreSQL <code>CREATE TABLE IF NOT EXISTS</code>).<br><br>
                 <code>load_user_prefs(thread_id, prefs_dir)</code> — tries Postgres first (<code>SELECT prefs FROM user_prefs WHERE thread_id = %s</code>); falls back to reading <code>prefs_dir/{thread_id}.json</code>.<br><br>
                 <code>save_user_prefs(thread_id, prefs, prefs_dir)</code> — upserts into Postgres (<code>INSERT … ON CONFLICT DO UPDATE</code>); falls back to writing the JSON file.<br><br>
-                <code>_send_commission_email(summary, thread_id)</code> — reads <code>GMAIL_USER</code> and <code>GMAIL_APP_PASSWORD</code> from env. Builds a plain-text email with the commission summary, connects to <code>smtp.gmail.com:465</code> with SSL, logs in with the App Password, and sends the email from and to <code>GMAIL_USER</code>. Silently logs a warning if the env vars aren't set.<br><br>
-                <code>save_commission(thread_id, summary, timestamp, prefs_dir)</code> — saves the commission to Postgres (or JSON fallback), then always calls <code>_send_commission_email()</code> at the end regardless of which storage path was used.
+                <em>The old commission-saving + Gmail SMTP notification code (<code>save_commission()</code>, <code>_send_commission_email()</code>, the <code>commissions</code> table) was deleted — visitors now submit commissions via a form on the commissions page instead.</em>
             </div>
         </div>
         <div class="flow-conn"><div class="conn-line"></div></div>
@@ -1237,7 +1215,7 @@
                 <code>intent: str</code> — set by the <code>classify</code> node to <code>"artwork"</code>, <code>"general"</code>, or <code>"commission"</code>. Read by the conditional edge to route to the right handler.<br><br>
                 <code>user_prefs: dict</code> — loaded from Postgres/JSON at the start of each turn, updated by <code>extract_preferences</code>, saved back by <code>save_preferences</code>.<br><br>
                 <code>thread_id: str</code> — the visitor's UUID, passed through state so nodes can use it without calling the checkpointer directly.<br><br>
-                <code>commission_data: dict</code> — tracks whether a commission collection is in progress (<code>in_progress</code>), completed (<code>awaiting_review</code>), and its running summary. Persisted across turns so the multi-step intake can't be interrupted by a new artwork question.
+                <em>The old <code>commission_data: dict</code> field (used to track multi-turn commission intake progress) was removed — <code>commission_intake</code> now just returns a static link and needs no state.</em>
             </div>
         </div>
         <div class="flow-conn"><div class="conn-line"></div></div>
@@ -1273,14 +1251,14 @@
                 &nbsp;· <code>_llm_classifier</code> — max 20 tokens (outputs one word)<br>
                 &nbsp;· <code>_llm_main</code> — max 1024 tokens (artwork answers, bound with tools)<br>
                 &nbsp;· <code>_llm_chat</code> — max 512 tokens (general chat)<br>
-                &nbsp;· <code>_llm_commission</code> — max 1024 tokens (intake questions)<br>
                 &nbsp;· <code>_llm_extractor</code> — max 512 tokens (outputs JSON)<br><br>
+                <em>The old <code>_llm_commission</code> instance was removed along with the multi-turn intake it powered.</em><br><br>
                 <code>_trim(messages, n=10)</code> — slices the last 10 messages from state before sending to the LLM. Also skips forward past any orphaned ToolMessages so the LLM never receives a tool result without the preceding tool call.<br><br>
                 <code>load_preferences(state)</code> — calls <code>db.load_user_prefs()</code> and returns <code>{"user_prefs": prefs}</code>. No LLM call.<br><br>
-                <code>classify(state)</code> — if a commission is already in progress, short-circuits to <code>"commission"</code>. Otherwise sends just the last user message to <code>_llm_classifier</code> with a strict one-word system prompt.<br><br>
+                <code>classify(state)</code> — sends just the last user message to <code>_llm_classifier</code> with a strict one-word system prompt.<br><br>
                 <code>react_node(state)</code> — the artwork handler. Prepends <code>GALLERY_SYSTEM</code> + user preferences as system context. Loops up to 5 times: calls <code>_llm_with_tools</code>, if the response contains tool calls executes them via <code>_tool_node</code> and continues, otherwise breaks and returns all accumulated messages.<br><br>
                 <code>general_chat(state)</code> — single LLM call with <code>GENERAL_SYSTEM</code> prompt. No tools.<br><br>
-                <code>commission_intake(state)</code> — passes the last 8 messages to <code>_llm_commission</code> as formatted history. If the LLM response starts with <code>"COMPLETE:"</code>, calls <code>db.save_commission()</code> (which triggers the email) and returns a confirmation message. Otherwise returns the next question and sets <code>commission_data.in_progress = True</code>.<br><br>
+                <code>commission_intake(state)</code> — no LLM call, no state mutation. Returns a single fixed <code>AIMessage</code> pointing the visitor to the commissions page. The old multi-turn collector (asked type → subject → occasion → style → timeline → contact, then called <code>db.save_commission()</code>) was removed.<br><br>
                 <code>extract_preferences(state)</code> — sends the last 4 messages to <code>_llm_extractor</code>, parses the JSON output. Merges with existing preferences (caps: 10 series, 20 artworks). Returns <code>{}</code> if JSON parsing fails.<br><br>
                 <code>save_preferences(state)</code> — calls <code>db.save_user_prefs()</code>. No LLM call.
             </div>
@@ -1299,7 +1277,7 @@
                 <code>GALLERY_SYSTEM</code> — the main artwork prompt. Three critical rules: (1) never name an artwork without a tool result, (2) always call a tool before answering, (3) say honestly if a tool returns nothing. Lists which tool to use for which type of question. Tone: warm, funny, conversational gallery guide.<br><br>
                 <code>CLASSIFY_SYSTEM</code> — a strict one-word classifier. Outputs exactly <code>commission</code>, <code>artwork</code>, or <code>general</code>. No other output allowed.<br><br>
                 <code>GENERAL_SYSTEM</code> — for small talk. 1–3 sentences, warm and brief, gently steers toward the art collection.<br><br>
-                <code>COMMISSION_INTAKE_SYSTEM</code> — templated with <code>{history}</code>. Instructs the LLM to collect 6 pieces of info one question at a time, in a warm conversational tone. Contact details are required before the request can be filed. When all info is collected, the LLM must output exactly <code>COMPLETE: &lt;summary&gt;</code> — this format is what <code>commission_intake</code> node detects to trigger saving.<br><br>
+                <em>The old <code>COMMISSION_INTAKE_SYSTEM</code> prompt was deleted along with the multi-turn intake flow it drove.</em><br><br>
                 <code>EXTRACT_SYSTEM</code> — instructs the LLM to output only a JSON object with <code>liked_series</code>, <code>mentioned_artworks</code>, and <code>tone</code>. Strict format prevents extra text that would break <code>json.loads()</code>.
             </div>
         </div>
@@ -1334,7 +1312,7 @@
                 <strong>search_artworks.py</strong> — encodes the query with <code>embedding_model.encode()</code>, queries ChromaDB for top 5 results, filters out any with distance &gt; 1.5, formats each as title + series + URL + 200-char snippet.<br><br>
                 <strong>filter_by_series.py</strong> — case-insensitive match against <code>SERIES_ARTWORK_MAP</code> keys. Queries ChromaDB filtered by <code>{"series": matched_series}</code>. Falls back to the hardcoded filename list if ChromaDB has no indexed data yet. Always includes the series page URL from <code>SERIES_URLS</code>.<br><br>
                 <strong>get_artwork_details.py</strong> — embeds the artwork name, queries ChromaDB for top 3, then picks the result whose title most closely matches the input string (exact substring match preferred over pure vector distance). Returns full content + series + URL.<br><br>
-                <strong>commission_info.py</strong> — returns the static <code>COMMISSION_INFO</code> string from <code>base.py</code>. No arguments, no DB call. Used when a visitor asks general questions about commissioning before starting the intake flow.<br><br>
+                <strong>commission_info.py</strong> — returns the static <code>COMMISSION_INFO</code> string from <code>base.py</code>. No arguments, no DB call. Used when a visitor asks general questions about commissioning; separate from <code>commission_intake</code>, which just replies with a link.<br><br>
                 <strong>recommend_similar.py</strong> — two-step: first finds the source artwork's full document text using <code>get_artwork_details</code> logic, then embeds the <em>full content</em> (not just the title) and queries ChromaDB for the 5 most similar documents, excluding the source artwork itself. Returns up to 4 recommendations.
             </div>
         </div>

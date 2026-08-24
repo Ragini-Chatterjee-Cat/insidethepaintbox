@@ -1,7 +1,6 @@
 """PaintboxAgent — all LangGraph node implementations."""
 import json
 import os
-from datetime import datetime
 from pathlib import Path
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -54,7 +53,6 @@ class PaintboxAgent:
         self._llm_classifier = _make_llm(20)
         self._llm_main       = _make_llm(1024)
         self._llm_chat       = _make_llm(512)
-        self._llm_commission = _make_llm(1024)
         self._llm_extractor  = _make_llm(512)
         self._llm_with_tools = self._llm_main.bind_tools(ARTWORK_TOOLS)
         self._tool_node      = ToolNode(ARTWORK_TOOLS, handle_tool_errors=True)
