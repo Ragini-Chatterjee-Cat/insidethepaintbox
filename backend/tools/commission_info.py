@@ -10,9 +10,9 @@ class CommissionInfoTool(BaseTool):
         "Use this when a visitor asks about commissioning, ordering, pricing, or requesting custom artwork."
     )
     handle_tool_error: bool = True
-
+    # So we have two the run and the arun functions 
     def _run(self) -> str:
         return COMMISSION_INFO
-
+    # 
     def _arun(self):
         raise NotImplementedError("Use _run instead.")
