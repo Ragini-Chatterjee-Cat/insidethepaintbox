@@ -1,7 +1,5 @@
 # Inside the Paintbox
-
-Ragini Chatterjee's art portfolio - a static site with an AI chat widget
-that answers visitor questions about the artwork.
+My art portfolio : a website I creqted during my first CS50 course and then improve to add a chatbot using RAG with multi model embeddings to help explain my artwork.
 
 ## Structure
 
