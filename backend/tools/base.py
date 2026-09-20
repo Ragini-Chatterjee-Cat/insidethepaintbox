@@ -1,5 +1,5 @@
 """Shared singletons for all artwork tools."""
-from rag import collection, embedding_model
+from rag import collection, embed_query
 
 BASE_URL = "https://insidethepaintbox.netlify.app"
 CONFIDENCE_THRESHOLD = 1.5

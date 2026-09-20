@@ -134,6 +134,14 @@ def load_artwork_from_html(html_path, website_path="../"):
         headers = soup.find_all('h2')
         section_titles = " ".join([clean_text(h.get_text()) for h in headers])
 
+        # Locate the page's main image, if any, for multimodal embedding
+        img_elem = soup.find('img')
+        image_path = None
+        if img_elem and img_elem.get('src'):
+            candidate = (Path(html_path).parent / img_elem['src']).resolve()
+            if candidate.exists():
+                image_path = str(candidate)
+
         # Generate URL for this artwork
         url = get_artwork_url(html_path, website_path)
 
@@ -157,7 +165,8 @@ URL: {url}
             "series": series,
             "content": full_content,
             "source": str(html_path),
-            "url": url
+            "url": url,
+            "image_path": image_path,
         }
     except Exception as e:
         print(f"Error loading {html_path}: {e}")

@@ -1,7 +1,7 @@
 """RecommendSimilarTool — find artworks similar to a given one."""
 from langchain_core.tools import BaseTool, ToolException
 from pydantic import BaseModel, Field
-from .base import collection, embedding_model
+from .base import collection, embed_query
 
 
 class RecommendSimilarInput(BaseModel):
@@ -18,7 +18,7 @@ class RecommendSimilarTool(BaseTool):
     handle_tool_error: bool = True
 
     def _run(self, artwork_name: str) -> str:
-        source_embedding = embedding_model.encode(artwork_name).tolist()
+        source_embedding = embed_query(artwork_name)
         source_results = collection.query(
             query_embeddings=[source_embedding],
             n_results=1,
@@ -32,7 +32,7 @@ class RecommendSimilarTool(BaseTool):
         source_meta = source_results["metadatas"][0][0]
         source_title = source_meta.get("title", artwork_name)
 
-        content_embedding = embedding_model.encode(source_content).tolist()
+        content_embedding = embed_query(source_content)
         similar = collection.query(
             query_embeddings=[content_embedding],
             n_results=6,

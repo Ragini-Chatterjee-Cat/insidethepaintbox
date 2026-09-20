@@ -1,7 +1,7 @@
 """GetArtworkDetailsTool — full details about a specific artwork by title."""
 from langchain_core.tools import BaseTool, ToolException
 from pydantic import BaseModel, Field
-from .base import collection, embedding_model
+from .base import collection, embed_query
 
 
 class GetArtworkDetailsInput(BaseModel):
@@ -19,7 +19,7 @@ class GetArtworkDetailsTool(BaseTool):
     handle_tool_error: bool = True
 
     def _run(self, artwork_name: str) -> str:
-        query_embedding = embedding_model.encode(artwork_name).tolist()
+        query_embedding = embed_query(artwork_name)
         results = collection.query(
             query_embeddings=[query_embedding],
             n_results=3,
