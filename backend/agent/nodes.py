@@ -139,6 +139,14 @@ class PaintboxAgent:
                 break
             tool_results = self._tool_node.invoke({"messages": messages + new_messages})
             new_messages.extend(tool_results["messages"])
+        else:
+            # Loop exhausted without ever getting a tool-call-free response —
+            # every iteration called a tool, so new_messages ends on tool
+            # results, not an answer. Force one more call, without tools,
+            # so the visitor gets a real reply instead of chat_with_memory()
+            # falling back to a stale AIMessage from earlier in the thread.
+            final = self._llm_main.invoke(messages + new_messages)
+            new_messages.append(final)
 
         return {"messages": new_messages}
 
@@ -197,9 +205,17 @@ class PaintboxAgent:
         except (json.JSONDecodeError, ValueError):
             return {}
 
+        # dict.fromkeys dedupes while preserving order; putting this turn's
+        # extraction first means the newest items are the ones kept once
+        # the [:N] cap below is applied, rather than an arbitrary subset
+        # (set() has no ordering, so which items survived a cap was random).
         existing = state.get("user_prefs", {})
-        liked_series = list(set(existing.get("liked_series", []) + extracted.get("liked_series", [])))
-        mentioned = list(set(existing.get("mentioned_artworks", []) + extracted.get("mentioned_artworks", [])))
+        liked_series = list(dict.fromkeys(
+            extracted.get("liked_series", []) + existing.get("liked_series", [])
+        ))
+        mentioned = list(dict.fromkeys(
+            extracted.get("mentioned_artworks", []) + existing.get("mentioned_artworks", [])
+        ))
         tone = extracted.get("tone", existing.get("tone", ""))
 
         return {"user_prefs": {

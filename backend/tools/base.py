@@ -17,15 +17,19 @@ from rag import collection, embed_query
 BASE_URL = "https://insidethepaintbox.netlify.app"
 CONFIDENCE_THRESHOLD = 1.5  # Chroma distance above this = "not a real match"
 
+# Filenames here must match frontend/pages/series/ exactly - Netlify's
+# static hosting is case-sensitive, and 6 of these 8 were previously wrong
+# (e.g. "thoughts.html" for a file actually named "Thoughts.html"), silently
+# handing visitors a 404 whenever the chatbot linked a series page.
 SERIES_URLS = {
-    "Portraits":        f"{BASE_URL}/pages/series/portraits.html",
+    "Portraits":        f"{BASE_URL}/pages/series/Portraits.html",
     "Animal Portraits": f"{BASE_URL}/pages/series/portraits-animals.html",
-    "Mythical":         f"{BASE_URL}/pages/series/mythical.html",
-    "Thoughts":         f"{BASE_URL}/pages/series/thoughts.html",
-    "Camera Series":    f"{BASE_URL}/pages/series/cam.html",
+    "Mythical":         f"{BASE_URL}/pages/series/Mythical.html",
+    "Thoughts":         f"{BASE_URL}/pages/series/Thoughts.html",
+    "Camera Series":    f"{BASE_URL}/pages/series/Cam.html",
     "Diary Entries":    f"{BASE_URL}/pages/series/diary-entries.html",
-    "Fanart":           f"{BASE_URL}/pages/series/fanart.html",
-    "Cards":            f"{BASE_URL}/pages/series/cards.html",
+    "Fanart":           f"{BASE_URL}/pages/series/Fanart.html",
+    "Cards":            f"{BASE_URL}/pages/series/Cards.html",
 }
 
 COMMISSION_INFO = """

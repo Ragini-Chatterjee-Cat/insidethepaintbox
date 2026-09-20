@@ -13,7 +13,7 @@ visitor named one specific artwork by title.
 """
 from langchain_core.tools import BaseTool, ToolException
 from pydantic import BaseModel, Field
-from .base import collection, embed_query
+from .base import collection, embed_query, CONFIDENCE_THRESHOLD
 
 
 class GetArtworkDetailsInput(BaseModel):
@@ -44,13 +44,23 @@ class GetArtworkDetailsTool(BaseTool):
         if not results["documents"] or not results["documents"][0]:
             raise ToolException(f"Could not find any artwork named '{artwork_name}'.")
 
-        best_idx = 0
+        best_idx = None
         name_lower = artwork_name.lower()
         for i, meta in enumerate(results["metadatas"][0]):
             title = meta.get("title", "").lower()
             if name_lower in title or title in name_lower:
                 best_idx = i
                 break
+
+        if best_idx is None:
+            # No title actually matched the requested name - only trust the
+            # top embedding result if it's a confident match. Otherwise this
+            # would silently hand back an unrelated artwork's full details
+            # for a name that doesn't exist, contradicting GALLERY_SYSTEM's
+            # rule to admit when nothing was found.
+            if results["distances"][0][0] > CONFIDENCE_THRESHOLD:
+                raise ToolException(f"Could not find any artwork named '{artwork_name}'.")
+            best_idx = 0
 
         meta = results["metadatas"][0][best_idx]
         content = results["documents"][0][best_idx]

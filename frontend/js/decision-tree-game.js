@@ -95,123 +95,6 @@ class DecisionTreeGame {
         return { low: count0, high: count1 };
     }
 
-    findBestSplit(samples, feature) {
-        if (feature === 'CocoaPercent') {
-            return this.findBestNumericSplit(samples, feature);
-        } else {
-            return this.findBestCategoricalSplit(samples, feature);
-        }
-    }
-
-    findBestNumericSplit(samples, feature) {
-        const values = [...new Set(samples.map(s => s[feature]))].sort((a, b) => a - b);
-        let bestEntropy = Infinity;
-        let bestThreshold = null;
-
-        for (let i = 0; i < values.length - 1; i++) {
-            const threshold = (values[i] + values[i + 1]) / 2;
-            const left = samples.filter(s => s[feature] <= threshold);
-            const right = samples.filter(s => s[feature] > threshold);
-
-            if (left.length === 0 || right.length === 0) continue;
-
-            const weightedEntropy = (left.length / samples.length) * this.calculateEntropy(left) +
-                                 (right.length / samples.length) * this.calculateEntropy(right);
-
-            if (weightedEntropy < bestEntropy) {
-                bestEntropy = weightedEntropy;
-                bestThreshold = threshold;
-            }
-        }
-
-        return { threshold: bestThreshold, entropy: bestEntropy, type: 'numeric' };
-    }
-
-    findBestCategoricalSplit(samples, feature) {
-        const categories = [...new Set(samples.map(s => s[feature]))];
-
-        // For simplicity, split into each category vs rest
-        let bestEntropy = Infinity;
-        let bestCategory = null;
-
-        for (const cat of categories) {
-            const left = samples.filter(s => s[feature] === cat);
-            const right = samples.filter(s => s[feature] !== cat);
-
-            if (left.length === 0 || right.length === 0) continue;
-
-            const weightedEntropy = (left.length / samples.length) * this.calculateEntropy(left) +
-                                 (right.length / samples.length) * this.calculateEntropy(right);
-
-            if (weightedEntropy < bestEntropy) {
-                bestEntropy = weightedEntropy;
-                bestCategory = cat;
-            }
-        }
-
-        return { category: bestCategory, entropy: bestEntropy, type: 'categorical' };
-    }
-
-    splitNode(node, feature) {
-        if (node.isPure || node.samples.length <= 1) {
-            return false;
-        }
-
-        const split = this.findBestSplit(node.samples, feature);
-        if (!split.threshold && !split.category) return false;
-
-        node.splitFeature = feature;
-
-        let leftSamples, rightSamples, leftLabel, rightLabel;
-
-        if (split.type === 'numeric') {
-            node.splitValue = split.threshold;
-            leftSamples = node.samples.filter(s => s[feature] <= split.threshold);
-            rightSamples = node.samples.filter(s => s[feature] > split.threshold);
-            leftLabel = `<= ${split.threshold.toFixed(1)}`;
-            rightLabel = `> ${split.threshold.toFixed(1)}`;
-        } else {
-            node.splitValue = split.category;
-            leftSamples = node.samples.filter(s => s[feature] === split.category);
-            rightSamples = node.samples.filter(s => s[feature] !== split.category);
-            leftLabel = `= ${split.category}`;
-            rightLabel = `!= ${split.category}`;
-        }
-
-        const leftNode = {
-            id: `${node.id}-L`,
-            samples: leftSamples,
-            depth: node.depth + 1,
-            entropy: this.calculateEntropy(leftSamples),
-            isPure: this.isPure(leftSamples),
-            splitFeature: null,
-            splitValue: null,
-            children: [],
-            parent: node,
-            edgeLabel: leftLabel
-        };
-
-        const rightNode = {
-            id: `${node.id}-R`,
-            samples: rightSamples,
-            depth: node.depth + 1,
-            entropy: this.calculateEntropy(rightSamples),
-            isPure: this.isPure(rightSamples),
-            splitFeature: null,
-            splitValue: null,
-            children: [],
-            parent: node,
-            edgeLabel: rightLabel
-        };
-
-        node.children = [leftNode, rightNode];
-        this.splits++;
-        this.updateTreeDepth();
-        this.checkGameOver();
-
-        return true;
-    }
-
     updateTreeDepth() {
         const getDepth = (node) => {
             if (node.children.length === 0) return node.depth;
@@ -584,14 +467,6 @@ class DecisionTreeGame {
         }
     }
 
-    performSplit(feature) {
-        if (this.currentNode && this.splitNode(this.currentNode, feature)) {
-            // Select first impure leaf
-            const impureLeaves = this.getImpureLeaves();
-            this.currentNode = impureLeaves.length > 0 ? impureLeaves[0] : null;
-            this.render();
-        }
-    }
 }
 
 // Initialize game
