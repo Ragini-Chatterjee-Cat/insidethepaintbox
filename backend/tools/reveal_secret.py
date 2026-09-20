@@ -36,6 +36,3 @@ class RevealSecretTool(BaseTool):
             lines.append(entry)
 
         return "\n\n".join(lines)
-
-    def _arun(self):
-        raise NotImplementedError("Use _run instead.")

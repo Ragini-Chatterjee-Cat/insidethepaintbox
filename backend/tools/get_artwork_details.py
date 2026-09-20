@@ -50,6 +50,3 @@ class GetArtworkDetailsTool(BaseTool):
             output += f"URL: {url}\n"
         output += f"\n{content}"
         return output
-
-    def _arun(self, artwork_name: str):
-        raise NotImplementedError("Use _run instead.")

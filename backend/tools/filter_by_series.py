@@ -59,6 +59,3 @@ class FilterBySeriesTool(BaseTool):
             lines.append(line)
 
         return "\n".join(lines)
-
-    def _arun(self, series: str):
-        raise NotImplementedError("Use _run instead.")

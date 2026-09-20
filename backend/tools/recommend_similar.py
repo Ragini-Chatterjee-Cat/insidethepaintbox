@@ -62,6 +62,3 @@ class RecommendSimilarTool(BaseTool):
             raise ToolException(f"No similar artworks found for '{artwork_name}'.")
 
         return "\n".join(lines)
-
-    def _arun(self, artwork_name: str):
-        raise NotImplementedError("Use _run instead.")

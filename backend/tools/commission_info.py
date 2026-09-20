@@ -13,6 +13,3 @@ class CommissionInfoTool(BaseTool):
 
     def _run(self) -> str:
         return COMMISSION_INFO
-
-    def _arun(self):
-        raise NotImplementedError("Use _run instead.")

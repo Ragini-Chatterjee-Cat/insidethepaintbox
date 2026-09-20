@@ -60,6 +60,3 @@ class SearchArtworksTool(BaseTool):
             )
 
         return "Found these artworks:\n\n" + "\n\n".join(output_lines)
-
-    def _arun(self, query: str):
-        raise NotImplementedError("Use _run instead.")
