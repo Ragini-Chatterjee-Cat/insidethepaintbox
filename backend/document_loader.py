@@ -5,6 +5,7 @@ Extracts artwork information from HTML files
 
 from bs4 import BeautifulSoup
 from pathlib import Path
+from urllib.parse import unquote
 import re
 
 
@@ -82,6 +83,21 @@ def get_artwork_series(html_path):
     return _ARTWORK_TO_SERIES.get(filename, "")
 
 
+# Pages that exist but aren't linked from anywhere on the site. Not surfaced
+# by ordinary search or browsing — only revealed if a visitor explicitly
+# asks about something secret/hidden (see tools/reveal_secret.py).
+SECRET_ARTWORKS = {
+    "bibbity.html",
+    "bare.html",
+    "saree.html",
+}
+
+
+def is_secret_artwork(html_path):
+    """Whether this artwork should be hidden from ordinary search/browsing."""
+    return Path(html_path).name.lower() in SECRET_ARTWORKS
+
+
 def clean_text(text):
     """Clean extracted text by removing extra whitespace"""
     if not text:
@@ -118,13 +134,21 @@ def load_artwork_from_html(html_path, website_path="../"):
         with open(html_path, 'r', encoding='utf-8') as f:
             soup = BeautifulSoup(f.read(), 'html.parser')
 
-        # Extract title from h1
+        # Extract title from h1. This site nests <h6> (the subtitle/dimensions)
+        # inside <h1>, so h1.get_text() would silently absorb the subtitle
+        # into the title (e.g. "PEEPING THROUGH THE IVY CUSTOM PORTRAIT").
+        # Pull the subtitle's text out first, then remove it from the tree
+        # before reading the title, so each stays what it says it is.
         title_elem = soup.find('h1')
-        title = clean_text(title_elem.get_text()) if title_elem else ""
+        nested_subtitle = title_elem.find('h6') if title_elem else None
+        if nested_subtitle:
+            subtitle = clean_text(nested_subtitle.get_text())
+            nested_subtitle.extract()
+        else:
+            subtitle_elem = soup.find('h6')
+            subtitle = clean_text(subtitle_elem.get_text()) if subtitle_elem else ""
 
-        # Extract subtitle/dimensions from h6
-        subtitle_elem = soup.find('h6')
-        subtitle = clean_text(subtitle_elem.get_text()) if subtitle_elem else ""
+        title = clean_text(title_elem.get_text()) if title_elem else ""
 
         # Extract description from paragraphs
         paragraphs = soup.find_all('p')
@@ -134,11 +158,12 @@ def load_artwork_from_html(html_path, website_path="../"):
         headers = soup.find_all('h2')
         section_titles = " ".join([clean_text(h.get_text()) for h in headers])
 
-        # Locate the page's main image, if any, for multimodal embedding
+        # Locate the page's main image, if any, for multimodal embedding.
+        # src may be URL-encoded (e.g. "%20" for a space in the filename).
         img_elem = soup.find('img')
         image_path = None
         if img_elem and img_elem.get('src'):
-            candidate = (Path(html_path).parent / img_elem['src']).resolve()
+            candidate = (Path(html_path).parent / unquote(img_elem['src'])).resolve()
             if candidate.exists():
                 image_path = str(candidate)
 
@@ -167,6 +192,7 @@ URL: {url}
             "source": str(html_path),
             "url": url,
             "image_path": image_path,
+            "secret": is_secret_artwork(html_path),
         }
     except Exception as e:
         print(f"Error loading {html_path}: {e}")

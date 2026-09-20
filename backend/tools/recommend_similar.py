@@ -36,6 +36,7 @@ class RecommendSimilarTool(BaseTool):
         similar = collection.query(
             query_embeddings=[content_embedding],
             n_results=6,
+            where={"secret": False},
             include=["metadatas", "distances"],
         )
 

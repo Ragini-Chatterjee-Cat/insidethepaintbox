@@ -116,6 +116,7 @@ def index_documents(documents: List[Dict], force: bool = False) -> int:
                     "subtitle": doc.get("subtitle", ""),
                     "url": doc.get("url", ""),
                     "series": doc.get("series", ""),
+                    "secret": bool(doc.get("secret", False)),
                 }],
                 ids=[f"doc_{i}"],
             )

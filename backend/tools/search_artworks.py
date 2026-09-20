@@ -25,6 +25,7 @@ class SearchArtworksTool(BaseTool):
         results = collection.query(
             query_embeddings=[query_embedding],
             n_results=5,
+            where={"secret": False},
             include=["documents", "metadatas", "distances"],
         )
 
