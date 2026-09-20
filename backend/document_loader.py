@@ -3,10 +3,12 @@ Document Loader for Inside the Paintbox
 Extracts artwork information from HTML files
 """
 
-from bs4 import BeautifulSoup
 from pathlib import Path
+from typing import Dict, List, Optional
 from urllib.parse import unquote
 import re
+
+from bs4 import BeautifulSoup
 
 
 # Maps series names to the artwork filenames that belong to them.
@@ -77,7 +79,7 @@ for series_name, artworks in SERIES_ARTWORK_MAP.items():
         _ARTWORK_TO_SERIES[artwork_file.lower()] = series_name
 
 
-def get_artwork_series(html_path):
+def get_artwork_series(html_path) -> str:
     """Look up which series an artwork belongs to, based on its filename."""
     filename = Path(html_path).name.lower()
     return _ARTWORK_TO_SERIES.get(filename, "")
@@ -93,12 +95,12 @@ SECRET_ARTWORKS = {
 }
 
 
-def is_secret_artwork(html_path):
+def is_secret_artwork(html_path) -> bool:
     """Whether this artwork should be hidden from ordinary search/browsing."""
     return Path(html_path).name.lower() in SECRET_ARTWORKS
 
 
-def clean_text(text):
+def clean_text(text: Optional[str]) -> str:
     """Clean extracted text by removing extra whitespace"""
     if not text:
         return ""
@@ -107,7 +109,7 @@ def clean_text(text):
     return text.strip()
 
 
-def get_artwork_url(html_path, website_path):
+def get_artwork_url(html_path, website_path) -> str:
     """Generate the URL for an artwork page based on file path"""
     # Resolve both paths to absolute so relative_to works reliably
     html_path = Path(html_path).resolve()
@@ -122,13 +124,12 @@ def get_artwork_url(html_path, website_path):
     # Convert to URL path (forward slashes, URL encoded)
     url_path = str(relative_path).replace("\\", "/")
 
-    # Base URL - update this to your actual Netlify URL
     base_url = "https://insidethepaintbox.netlify.app"
 
     return f"{base_url}/{url_path}"
 
 
-def load_artwork_from_html(html_path, website_path="../"):
+def load_artwork_from_html(html_path, website_path="../") -> Optional[Dict]:
     """Extract artwork information from a single HTML file"""
     try:
         with open(html_path, 'r', encoding='utf-8') as f:
@@ -153,10 +154,6 @@ def load_artwork_from_html(html_path, website_path="../"):
         # Extract description from paragraphs
         paragraphs = soup.find_all('p')
         description = " ".join([clean_text(p.get_text()) for p in paragraphs])
-
-        # Extract any h2 headers (like "INSPIRATION")
-        headers = soup.find_all('h2')
-        section_titles = " ".join([clean_text(h.get_text()) for h in headers])
 
         # Locate every image on the page (some pieces, e.g. Head in the
         # Clouds, show multiple) for multimodal embedding. src may be
@@ -202,7 +199,7 @@ URL: {url}
         return None
 
 
-def load_all_artworks(website_path):
+def load_all_artworks(website_path) -> List[Dict]:
     """Load all artwork documents from the website"""
     documents = []
     website_path = Path(website_path)
@@ -232,7 +229,7 @@ def load_all_artworks(website_path):
     return documents
 
 
-def load_about_page(website_path):
+def load_about_page(website_path) -> Optional[Dict]:
     """Load the about page for artist information"""
     about_path = Path(website_path) / "pages" / "about.html"
     if about_path.exists():

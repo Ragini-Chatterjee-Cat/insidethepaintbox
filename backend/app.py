@@ -13,7 +13,6 @@ from slowapi.errors import RateLimitExceeded
 import asyncio
 import os
 import traceback
-from datetime import datetime
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -23,7 +22,8 @@ load_dotenv()
 import db
 from rag import index_documents, get_collection_stats
 from document_loader import load_all_artworks, load_about_page
-# Here this clear_conversation only gets rid of the prefferences 
+# clear_conversation only deletes the saved preferences file/row for a
+# thread; LangGraph's own checkpointed message history is untouched by it.
 from agent import chat_with_memory, get_conversation_history, clear_conversation
 
 
@@ -98,11 +98,11 @@ class ChatMessage(BaseModel):
     role: str  # "user" or "assistant"
     content: str
 
-class ChatRequestV2(BaseModel):
+class ChatRequest(BaseModel):
     message: str
     thread_id: str  # Persistent thread ID for memory
 
-class ChatResponseV2(BaseModel):
+class ChatResponse(BaseModel):
     response: str
     thread_id: str
 
@@ -140,15 +140,19 @@ async def health_check():
     )
 
 
-
 MAX_MESSAGE_LENGTH = 500   # chars — long prompts signal off-topic abuse
 MAX_USER_TURNS = 20  # max user messages per session
 
 
-@app.post("/chat/v2", response_model=ChatResponseV2)
+@app.post("/chat/v2", response_model=ChatResponse)
 @limiter.limit("15/minute")
-async def chat_v2(request: Request, body: ChatRequestV2):
-    """Chat endpoint with persistent memory (LangGraph)."""
+async def chat(request: Request, body: ChatRequest):
+    """Chat endpoint with persistent memory (LangGraph).
+
+    Route path stays "/chat/v2" — the frontend calls this exact URL, and
+    there's no "v1" left to disambiguate from (removed in an earlier
+    commit), so the "v2" here is just the API contract, not a code name.
+    """
     if not body.message or not body.message.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
@@ -165,7 +169,7 @@ async def chat_v2(request: Request, body: ChatRequestV2):
         history = get_conversation_history(body.thread_id)
         user_turns = sum(1 for m in history if m["role"] == "user")
         if user_turns >= MAX_USER_TURNS:
-            return ChatResponseV2(
+            return ChatResponse(
                 response=(
                     "We've had quite the gallery tour! This session has reached its limit. "
                     "Feel free to refresh the page to start a fresh conversation."
@@ -174,9 +178,9 @@ async def chat_v2(request: Request, body: ChatRequestV2):
             )
 
         response = chat_with_memory(body.message, body.thread_id)
-        return ChatResponseV2(response=response, thread_id=body.thread_id)
+        return ChatResponse(response=response, thread_id=body.thread_id)
     except Exception as e:
-        print(f"Error in chat v2 endpoint: {e}")
+        print(f"Error in chat endpoint: {e}")
         traceback.print_exc()
         raise HTTPException(
             status_code=500,

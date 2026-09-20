@@ -1,17 +1,15 @@
 """Paintbox LangGraph agent package."""
-# A library that connects the path 
-from pathlib import Path 
-# Porquoi pas le list par python
+import logging
 from typing import List
-# Basically for the messages that are sent to the agent and the messages that are sent back from the agent
+
 from langchain_core.messages import AIMessage, HumanMessage
 
 from .graph import compiled_graph
 from .nodes import PREFS_DIR
 
-# We are invoking the graph with the memory 
+
 def chat_with_memory(message: str, thread_id: str) -> str:
-    import logging
+    """Run one turn of the graph and return the assistant's reply text."""
     config = {"configurable": {"thread_id": thread_id}}
     try:
         result = compiled_graph.invoke(
@@ -26,7 +24,6 @@ def chat_with_memory(message: str, thread_id: str) -> str:
             return msg.content
     return "I'm sorry, I couldn't generate a response. Please try again."
 
-#
 def get_conversation_history(thread_id: str) -> List[dict]:
     config = {"configurable": {"thread_id": thread_id}}
     state = compiled_graph.get_state(config)
