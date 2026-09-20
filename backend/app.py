@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+import asyncio
 import os
 import traceback
 from datetime import datetime
@@ -29,28 +30,36 @@ from agent import chat_with_memory, get_conversation_history, clear_conversation
 limiter = Limiter(key_func=get_remote_address)
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Startup and shutdown events"""
-    db.setup_tables()
-    print("Starting up... Indexing artwork documents...")
+async def _index_startup_documents():
+    """Runs in the background so it never blocks the app from serving
+    traffic. index_documents() itself skips the (network-bound) reindex
+    entirely if the artwork content hasn't changed since last time."""
+    print("Indexing artwork documents in the background...")
     try:
-        # Load documents from the website
         docs = load_all_artworks("../frontend/")
-
-        # Also load about page
         about = load_about_page("../frontend/")
         if about:
             docs.append(about)
 
-        # Index them
         if docs:
-            index_documents(docs)
-            print(f"Successfully indexed {len(docs)} documents!")
+            # index_documents() calls Voyage's API per document — run it off
+            # the event loop so it can't stall request handling meanwhile.
+            count = await asyncio.to_thread(index_documents, docs)
+            print(f"Indexing complete: {count}/{len(docs)} documents in the collection")
         else:
             print("Warning: No documents found to index!")
     except Exception as e:
         print(f"Error during startup indexing: {e}")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup and shutdown events"""
+    db.setup_tables()
+    # Not awaited: the app starts accepting requests immediately. Until this
+    # finishes, artwork-search tools just see an empty or stale collection
+    # rather than the whole API being unavailable.
+    app.state.startup_index_task = asyncio.create_task(_index_startup_documents())
 
     yield
 
@@ -207,8 +216,8 @@ async def delete_history(thread_id: str):
 @app.post("/reindex", response_model=IndexResponse)
 async def reindex_documents():
     """
-    Manually reindex all documents
-    Call this if you've updated your artwork pages
+    Manually reindex all documents, bypassing the unchanged-content skip.
+    Call this if you've updated your artwork pages.
     """
     try:
         docs = load_all_artworks("../frontend/")
@@ -216,7 +225,7 @@ async def reindex_documents():
         if about:
             docs.append(about)
 
-        count = index_documents(docs)
+        count = await asyncio.to_thread(index_documents, docs, force=True)
         return IndexResponse(status="success", documents_indexed=count)
     except Exception as e:
         print(f"Error reindexing: {e}")
