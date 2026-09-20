@@ -10,7 +10,7 @@ filter_by_series.py, recommend_similar.py, commission_info.py,
 reveal_secret.py). Not called directly — these are module-level values,
 resolved once on first import and reused for the life of the process.
 """
-from rag import collection, embed_query
+from rag import collection, embed_query  # noqa: F401 - re-exported for tools/*.py
 
 # --- shared values ------------------------------------------------------
 

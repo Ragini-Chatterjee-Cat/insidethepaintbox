@@ -11,6 +11,7 @@ and agent/nodes.py (as the type hint on every node method's `state` param).
 Not called directly — it's a data shape, not a function.
 """
 from typing import Annotated, TypedDict
+
 from langgraph.graph.message import add_messages
 
 

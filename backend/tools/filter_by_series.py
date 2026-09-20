@@ -13,8 +13,10 @@ visitor named one of the eight series directly.
 """
 from langchain_core.tools import BaseTool, ToolException
 from pydantic import BaseModel, Field
+
 from document_loader import SERIES_ARTWORK_MAP
-from .base import collection, SERIES_URLS
+
+from .base import SERIES_URLS, collection
 
 
 class FilterBySeriesInput(BaseModel):
@@ -46,7 +48,7 @@ class FilterBySeriesTool(BaseTool):
             raise ToolException(f"Series '{series}' not found. Available: {available}")
 
         results = collection.get(
-            where={"series": matched_series},
+            where={"$and": [{"series": matched_series}, {"secret": False}]},
             include=["metadatas"],
         )
 

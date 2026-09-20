@@ -11,6 +11,7 @@ ToolNode inside PaintboxAgent.react_node() whenever the model decides a
 visitor is asking about commissioning custom work.
 """
 from langchain_core.tools import BaseTool
+
 from .base import COMMISSION_INFO
 
 

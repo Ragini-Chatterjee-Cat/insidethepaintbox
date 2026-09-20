@@ -12,10 +12,9 @@ startup and by the /reindex endpoint) and tools/filter_by_series.py
 has no metadata for them yet).
 """
 
-from pathlib import Path
-from typing import Dict, List, Optional
-from urllib.parse import unquote
 import re
+from pathlib import Path
+from urllib.parse import unquote
 
 from bs4 import BeautifulSoup
 
@@ -114,7 +113,7 @@ def is_secret_artwork(html_path) -> bool:
 
 # --- text/URL helpers -------------------------------------------------------
 
-def clean_text(text: Optional[str]) -> str:
+def clean_text(text: str | None) -> str:
     """Collapse any run of whitespace/newlines in `text` down to single
     spaces and trim the ends. Returns "" for falsy input."""
     if not text:
@@ -148,12 +147,12 @@ def get_artwork_url(html_path, website_path) -> str:
 
 # --- main extraction --------------------------------------------------------
 
-def load_artwork_from_html(html_path, website_path="../") -> Optional[Dict]:
+def load_artwork_from_html(html_path, website_path="../") -> dict | None:
     """Parse one HTML file into a document dict ready for rag.index_documents():
     title, subtitle, description, series, image paths, secret flag, and a
     combined `content` string. Returns None if the file can't be read/parsed."""
     try:
-        with open(html_path, 'r', encoding='utf-8') as f:
+        with open(html_path, encoding='utf-8') as f:
             soup = BeautifulSoup(f.read(), 'html.parser')
 
         # Extract title from h1. This site nests <h6> (the subtitle/dimensions)
@@ -184,7 +183,15 @@ def load_artwork_from_html(html_path, website_path="../") -> Optional[Dict]:
             src = img_elem.get('src')
             if not src:
                 continue
-            candidate = (Path(html_path).parent / unquote(src)).resolve()
+            decoded_src = unquote(src)
+            if decoded_src.startswith('/'):
+                # Site-root-relative (e.g. "/images/foo.png"): Path's `/`
+                # operator discards the left operand entirely for a path
+                # that looks absolute, so resolve this against the site
+                # root explicitly instead of the page's own directory.
+                candidate = (Path(website_path) / decoded_src.lstrip('/')).resolve()
+            else:
+                candidate = (Path(html_path).parent / decoded_src).resolve()
             if candidate.exists() and str(candidate) not in image_paths:
                 image_paths.append(str(candidate))
 
@@ -222,7 +229,7 @@ URL: {url}
 
 # --- batch loaders (called at startup and by /reindex) ----------------------
 
-def load_all_artworks(website_path) -> List[Dict]:
+def load_all_artworks(website_path) -> list[dict]:
     """Load every page under artworks/ plus every series page under
     pages/series/, skipping any file that fails to parse."""
     documents = []
@@ -253,7 +260,7 @@ def load_all_artworks(website_path) -> List[Dict]:
     return documents
 
 
-def load_about_page(website_path) -> Optional[Dict]:
+def load_about_page(website_path) -> dict | None:
     """Load pages/about.html as its own document, retitled "About the
     Artist" so it reads clearly in search results."""
     about_path = Path(website_path) / "pages" / "about.html"

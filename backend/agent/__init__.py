@@ -11,7 +11,6 @@ Imported by: app.py only —
   - clear_conversation() -> DELETE /chat/history/{thread_id}
 """
 import logging
-from typing import List
 
 from langchain_core.messages import AIMessage, HumanMessage
 
@@ -36,7 +35,7 @@ def chat_with_memory(message: str, thread_id: str) -> str:
             return msg.content
     return "I'm sorry, I couldn't generate a response. Please try again."
 
-def get_conversation_history(thread_id: str) -> List[dict]:
+def get_conversation_history(thread_id: str) -> list[dict]:
     """Read `thread_id`'s message history back out of the graph's
     checkpointer (Postgres or in-memory) as a plain role/content list,
     without running the graph."""

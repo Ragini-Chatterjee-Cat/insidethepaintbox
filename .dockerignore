@@ -1,0 +1,35 @@
+# Local virtual environments - never copy the host's venv into the image;
+# uv creates its own inside the container and a host-built one (wrong
+# platform, wrong paths) would silently corrupt it if copied over.
+.venv/
+venv/
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Local runtime/dev state - the same things .gitignore excludes from git
+backend/chroma_db/
+backend/.langgraph_api/
+backend/user_prefs/
+*.sqlite3
+*.db
+
+# VCS and editor
+.git/
+.vscode/
+.idea/
+.DS_Store
+
+# Env files - real secrets should reach the container via Railway's
+# environment variables, never baked into the image
+.env
+*.env
+!.env.example
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+tests/

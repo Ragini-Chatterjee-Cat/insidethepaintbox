@@ -15,6 +15,7 @@ agent/prompts.py) that a visitor explicitly asked about something
 hidden/secret. It is never called for ordinary browsing.
 """
 from langchain_core.tools import BaseTool, ToolException
+
 from .base import collection
 
 
@@ -49,7 +50,7 @@ class RevealSecretTool(BaseTool):
             if url:
                 entry += f"\n  URL: {url}"
             if snippet:
-                entry += f"\n  About: {snippet}..."
+                entry += f"\n  About: {snippet}" + ("..." if len(content) > 200 else "")
             lines.append(entry)
 
         return "\n\n".join(lines)

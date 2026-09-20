@@ -13,29 +13,29 @@ The frontend (frontend/js/chat.js) is this API's only consumer, calling
 POST /chat/v2 for every chat turn.
 """
 
+import asyncio
+import traceback
+from contextlib import asynccontextmanager
+
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from contextlib import asynccontextmanager
 from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-import asyncio
-import os
-import traceback
-from dotenv import load_dotenv
+from slowapi.util import get_remote_address
 
 # Load environment variables
 load_dotenv()
 
 # Import our modules
 import db
-from rag import index_documents, get_collection_stats
-from document_loader import load_all_artworks, load_about_page
+
 # clear_conversation only deletes the saved preferences file/row for a
 # thread; LangGraph's own checkpointed message history is untouched by it.
-from agent import chat_with_memory, get_conversation_history, clear_conversation
-
+from agent import chat_with_memory, clear_conversation, get_conversation_history
+from document_loader import load_about_page, load_all_artworks
+from rag import get_collection_stats, index_documents
 
 limiter = Limiter(key_func=get_remote_address)
 
@@ -186,7 +186,7 @@ async def chat(request: Request, body: ChatRequest):
         )
 
     try:
-        history = get_conversation_history(body.thread_id)
+        history = await asyncio.to_thread(get_conversation_history, body.thread_id)
         user_turns = sum(1 for m in history if m["role"] == "user")
         if user_turns >= MAX_USER_TURNS:
             return ChatResponse(
@@ -197,7 +197,12 @@ async def chat(request: Request, body: ChatRequest):
                 thread_id=body.thread_id,
             )
 
-        response = chat_with_memory(body.message, body.thread_id)
+        # chat_with_memory() calls Claude and Voyage synchronously, and
+        # Voyage's retry-with-backoff (rag.py) can sleep for several
+        # seconds on a transient error - run it off the event loop so one
+        # slow/retrying request can't freeze every other visitor's request
+        # (uvicorn runs this as a single process with no --workers).
+        response = await asyncio.to_thread(chat_with_memory, body.message, body.thread_id)
         return ChatResponse(response=response, thread_id=body.thread_id)
     except Exception as e:
         print(f"Error in chat endpoint: {e}")

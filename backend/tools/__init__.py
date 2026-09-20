@@ -11,12 +11,12 @@ and wraps it in a LangGraph ToolNode (`self._tool_node`). No functions
 here to call; this module's only job is building that one list at
 import time.
 """
-from .search_artworks import SearchArtworksTool
+from .commission_info import CommissionInfoTool
 from .filter_by_series import FilterBySeriesTool
 from .get_artwork_details import GetArtworkDetailsTool
-from .commission_info import CommissionInfoTool
 from .recommend_similar import RecommendSimilarTool
 from .reveal_secret import RevealSecretTool
+from .search_artworks import SearchArtworksTool
 
 ARTWORK_TOOLS = [
     SearchArtworksTool(),

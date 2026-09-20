@@ -16,18 +16,20 @@ import json
 import os
 from pathlib import Path
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_anthropic import ChatAnthropic
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.prebuilt import ToolNode
+
 import db
 from tools import ARTWORK_TOOLS
-from .state import AgentState
+
 from .prompts import (
-    GALLERY_SYSTEM,
     CLASSIFY_SYSTEM,
-    GENERAL_SYSTEM,
     EXTRACT_SYSTEM,
+    GALLERY_SYSTEM,
+    GENERAL_SYSTEM,
 )
+from .state import AgentState
 
 PREFS_DIR = Path(os.environ.get("PREFS_DIR", "./user_prefs"))
 PREFS_DIR.mkdir(parents=True, exist_ok=True)
@@ -205,6 +207,14 @@ class PaintboxAgent:
         except (json.JSONDecodeError, ValueError):
             return {}
 
+        if not isinstance(extracted, dict):
+            # The extractor is asked for a JSON object but nothing enforces
+            # it structurally - valid JSON like `null` or `[]` would parse
+            # fine and then crash the next line's .get() calls, which
+            # would 500 the whole turn even though react_node/general_chat
+            # already produced a perfectly good reply for the visitor.
+            return {}
+
         # dict.fromkeys dedupes while preserving order; putting this turn's
         # extraction first means the newest items are the ones kept once
         # the [:N] cap below is applied, rather than an arbitrary subset
@@ -216,7 +226,12 @@ class PaintboxAgent:
         mentioned = list(dict.fromkeys(
             extracted.get("mentioned_artworks", []) + existing.get("mentioned_artworks", [])
         ))
-        tone = extracted.get("tone", existing.get("tone", ""))
+        # `or`, not .get(..., default): EXTRACT_SYSTEM always includes a
+        # "tone" key (empty string when none is found), so .get()'s default
+        # never actually applied - every turn where the extractor didn't
+        # detect a new tone was silently overwriting a previously saved one
+        # with "".
+        tone = extracted.get("tone") or existing.get("tone", "")
 
         return {"user_prefs": {
             "liked_series": liked_series[:10],

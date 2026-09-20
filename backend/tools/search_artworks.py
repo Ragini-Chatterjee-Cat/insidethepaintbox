@@ -12,9 +12,10 @@ ToolNode inside PaintboxAgent.react_node() whenever the model decides
 (from this class's `description` below) that a visitor's message calls
 for a general/thematic search rather than a named lookup.
 """
-from langchain_core.tools import BaseTool, ToolException
+from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
-from .base import collection, embed_query, CONFIDENCE_THRESHOLD
+
+from .base import CONFIDENCE_THRESHOLD, collection, embed_query
 
 
 class SearchArtworksInput(BaseModel):
@@ -65,7 +66,7 @@ class SearchArtworksTool(BaseTool):
                 entry += f"\n  URL: {url}"
             snippet = content[:200].replace("\n", " ").strip()
             if snippet:
-                entry += f"\n  About: {snippet}..."
+                entry += f"\n  About: {snippet}" + ("..." if len(content) > 200 else "")
             output_lines.append(entry)
 
         if not output_lines:

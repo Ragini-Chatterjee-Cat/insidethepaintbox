@@ -13,7 +13,8 @@ visitor named one specific artwork by title.
 """
 from langchain_core.tools import BaseTool, ToolException
 from pydantic import BaseModel, Field
-from .base import collection, embed_query, CONFIDENCE_THRESHOLD
+
+from .base import CONFIDENCE_THRESHOLD, collection, embed_query
 
 
 class GetArtworkDetailsInput(BaseModel):
@@ -38,6 +39,7 @@ class GetArtworkDetailsTool(BaseTool):
         results = collection.query(
             query_embeddings=[query_embedding],
             n_results=3,
+            where={"secret": False},
             include=["documents", "metadatas", "distances"],
         )
 

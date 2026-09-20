@@ -13,6 +13,7 @@ visitor wants more of something they already liked.
 """
 from langchain_core.tools import BaseTool, ToolException
 from pydantic import BaseModel, Field
+
 from .base import collection, embed_query
 
 
@@ -37,6 +38,7 @@ class RecommendSimilarTool(BaseTool):
         source_results = collection.query(
             query_embeddings=[source_embedding],
             n_results=1,
+            where={"secret": False},
             include=["documents", "metadatas"],
         )
 

@@ -14,9 +14,11 @@ itself runs exactly once, at import time (see the module-level call at
 the bottom of this file) — nothing calls it again after that.
 """
 import os
+
 from langgraph.graph import END, START, StateGraph
-from .state import AgentState
+
 from .nodes import PaintboxAgent
+from .state import AgentState
 
 
 def build_graph():
@@ -55,8 +57,8 @@ def build_graph():
     postgres_uri = os.environ.get("POSTGRES_URI")
     if postgres_uri:
         try:
-            from psycopg_pool import ConnectionPool
             from langgraph.checkpoint.postgres import PostgresSaver
+            from psycopg_pool import ConnectionPool
             # A pool of up to 5 connections. `check` validates a connection before
             # handing it out (reconnecting if the DB/network silently dropped it while
             # idle) instead of only discovering it's dead when a real query fails.
