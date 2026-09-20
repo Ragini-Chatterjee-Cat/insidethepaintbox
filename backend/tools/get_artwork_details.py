@@ -1,4 +1,16 @@
-"""GetArtworkDetailsTool — full details about a specific artwork by title."""
+"""
+GetArtworkDetailsTool — full details about a specific artwork by title.
+
+Purpose: answers "tell me about <artwork name>" with the full indexed
+content for that one piece, re-ranked by title match rather than trusting
+raw embedding distance alone.
+
+Called by: nothing in this codebase calls it directly. It's registered in
+tools/__init__.py's ARTWORK_TOOLS list, bound to the LLM in
+agent/nodes.py's PaintboxAgent.__init__(), and invoked by LangGraph's
+ToolNode inside PaintboxAgent.react_node() whenever the model decides a
+visitor named one specific artwork by title.
+"""
 from langchain_core.tools import BaseTool, ToolException
 from pydantic import BaseModel, Field
 from .base import collection, embed_query
@@ -19,6 +31,9 @@ class GetArtworkDetailsTool(BaseTool):
     handle_tool_error: bool = True
 
     def _run(self, artwork_name: str) -> str:
+        """Embed `artwork_name`, take the top-3 nearest documents, then
+        prefer whichever one's title actually contains (or is contained
+        by) the requested name over the raw #1 embedding match."""
         query_embedding = embed_query(artwork_name)
         results = collection.query(
             query_embeddings=[query_embedding],

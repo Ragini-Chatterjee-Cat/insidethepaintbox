@@ -1,6 +1,16 @@
 """
 Inside the Paintbox - RAG Chatbot API
-FastAPI backend for the art website chatbot
+FastAPI backend for the art website chatbot.
+
+Purpose: the app's single entry point — wires together document_loader.py
+(HTML -> documents), rag.py (documents -> Chroma index), the LangGraph
+agent (agent/, via chat_with_memory()), and db.py (Postgres/JSON prefs)
+behind a small set of HTTP endpoints.
+
+Run by: uvicorn (`uvicorn app:app`, or `python3 app.py` directly — see
+the bottom of this file), not imported by anything else in this repo.
+The frontend (frontend/js/chat.js) is this API's only consumer, calling
+POST /chat/v2 for every chat turn.
 """
 
 from fastapi import FastAPI, HTTPException, Request
@@ -30,6 +40,8 @@ from agent import chat_with_memory, get_conversation_history, clear_conversation
 limiter = Limiter(key_func=get_remote_address)
 
 
+# --- startup indexing --------------------------------------------------
+
 async def _index_startup_documents():
     """Runs in the background so it never blocks the app from serving
     traffic. index_documents() itself skips the (network-bound) reindex
@@ -54,7 +66,9 @@ async def _index_startup_documents():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup and shutdown events"""
+    """FastAPI startup/shutdown hook. Ensures the prefs table exists,
+    kicks off background indexing, then yields to let the app serve
+    requests; runs once at process start and once at shutdown."""
     db.setup_tables()
     # Not awaited: the app starts accepting requests immediately. Until this
     # finishes, artwork-search tools just see an empty or stale collection
@@ -67,7 +81,8 @@ async def lifespan(app: FastAPI):
     print("Shutting down...")
 
 
-# Create FastAPI app
+# --- app setup: FastAPI instance, rate limiter, CORS ------------------------
+
 app = FastAPI(
     title="Inside the Paintbox API",
     description="RAG Chatbot API for Ragini Chatterjee's Art Portfolio",
@@ -93,7 +108,8 @@ app.add_middleware(
 )
 
 
-# Request/Response Models
+# --- request/response models ------------------------------------------------
+
 class ChatMessage(BaseModel):
     role: str  # "user" or "assistant"
     content: str
@@ -119,10 +135,12 @@ class HealthResponse(BaseModel):
     documents_count: int
 
 
-# API Endpoints
+# --- API endpoints -----------------------------------------------------
+
 @app.get("/", response_model=HealthResponse)
 async def root():
-    """Root endpoint - health check"""
+    """Root health check — same response shape as /health, kept as a
+    separate route since some uptime monitors probe "/" by default."""
     stats = get_collection_stats()
     return HealthResponse(
         status="ok",
@@ -132,7 +150,9 @@ async def root():
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
-    """Health check endpoint"""
+    """Health check endpoint — reports whether the Chroma collection has
+    documents in it, which is a reasonable proxy for "did startup
+    indexing finish yet"."""
     stats = get_collection_stats()
     return HealthResponse(
         status="healthy",
@@ -190,9 +210,8 @@ async def chat(request: Request, body: ChatRequest):
 
 @app.get("/chat/history/{thread_id}", response_model=HistoryResponse)
 async def get_history(thread_id: str):
-    """
-    Get conversation history for a thread
-    """
+    """Return this thread's full message history from the LangGraph
+    checkpointer, reformatted as plain role/content pairs for the client."""
     try:
         history = get_conversation_history(thread_id)
         messages = [ChatMessage(role=msg["role"], content=msg["content"]) for msg in history]
@@ -204,9 +223,8 @@ async def get_history(thread_id: str):
 
 @app.delete("/chat/history/{thread_id}")
 async def delete_history(thread_id: str):
-    """
-    Clear conversation history for a thread
-    """
+    """Delete this thread's saved preferences (see agent.clear_conversation's
+    docstring for what this does and doesn't clear)."""
     try:
         success = clear_conversation(thread_id)
         if success:
@@ -238,11 +256,14 @@ async def reindex_documents():
 
 @app.get("/stats")
 async def get_stats():
-    """Get statistics about the indexed documents"""
+    """Return the raw dict from rag.get_collection_stats() (document
+    count + collection name) — mainly for manual/curl debugging."""
     return get_collection_stats()
 
 
-# Run with: uvicorn app:app --reload --port 8000
+# --- local dev entry point ---------------------------------------------
+
 if __name__ == "__main__":
+    # Run with: python3 app.py (equivalent to `uvicorn app:app --port 8000`)
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -1,4 +1,17 @@
-"""PaintboxAgent — all LangGraph node implementations."""
+"""
+PaintboxAgent — all LangGraph node implementations for the Paintbox agent.
+
+Purpose: every step the agent can take (load prefs, classify intent, run
+the tool-calling gallery guide, chat plainly, hand off to commissions,
+extract preferences, save them) is a method on PaintboxAgent here. This
+is where the actual LLM calls happen — agent/graph.py only wires these
+methods into a state machine, it contains no logic of its own.
+
+Imported by: agent/graph.py only. build_graph() instantiates
+PaintboxAgent() once and registers each of its methods below as a node
+in the compiled graph; LangGraph calls them itself as the graph runs,
+nothing here is called directly by app.py or any other module.
+"""
 import json
 import os
 from pathlib import Path
@@ -23,9 +36,10 @@ MAX_HISTORY = 10
 
 
 def _trim(messages: list, n: int = MAX_HISTORY) -> list:
+    """Keep only the last `n` messages, then skip forward to the first
+    HumanMessage in that slice — never let a trimmed list start on an
+    orphaned ToolMessage with no preceding tool call for context."""
     trimmed = messages[-n:] if len(messages) > n else messages
-    # Don't start on a tool result — skip forward to the first HumanMessage
-    # to avoid sending an orphaned ToolMessage without its preceding tool call.
     for i, msg in enumerate(trimmed):
         if isinstance(msg, HumanMessage):
             return trimmed[i:]
@@ -33,14 +47,20 @@ def _trim(messages: list, n: int = MAX_HISTORY) -> list:
 
 
 class PaintboxAgent:
-    """Encapsulates all graph nodes and their shared LLM instances."""
+    """Encapsulates all graph nodes and their shared LLM instances. One
+    instance is created per process (in build_graph()) and reused for
+    every conversation turn that process handles."""
 
     def __init__(self):
+        """Build the four Haiku clients this agent uses (one per node
+        that calls the model, each with its own max_tokens ceiling) plus
+        the tool-calling variant and its LangGraph ToolNode wrapper."""
         api_key = os.environ.get("ANTHROPIC_API_KEY")
         if not api_key:
             raise ValueError("ANTHROPIC_API_KEY environment variable not set!")
 
         def _make_llm(max_tokens: int) -> ChatAnthropic:
+            """Build one Claude Haiku client pinned to `max_tokens` output."""
             return ChatAnthropic(
                 model="claude-haiku-4-5-20251001",
                 api_key=api_key,
@@ -61,6 +81,8 @@ class PaintboxAgent:
     # -----------------------------------------------------------------------
 
     def load_preferences(self, state: AgentState) -> dict:
+        """First node in the graph. Loads this thread's saved prefs (via
+        db.py) into state so later nodes can personalize the reply."""
         thread_id = state.get("thread_id", "")
         prefs = db.load_user_prefs(thread_id, PREFS_DIR) if thread_id else {}
         return {"user_prefs": prefs}
@@ -70,6 +92,9 @@ class PaintboxAgent:
     # -----------------------------------------------------------------------
 
     def classify(self, state: AgentState) -> dict:
+        """Ask the cheap classifier LLM to label the latest visitor message
+        as "artwork", "commission", or "general" — route_intent() below
+        uses this to pick the next node."""
         messages = _trim(state["messages"])
         last_user = next(
             (m.content for m in reversed(messages) if isinstance(m, HumanMessage)), ""
@@ -90,6 +115,10 @@ class PaintboxAgent:
     # -----------------------------------------------------------------------
 
     def react_node(self, state: AgentState) -> dict:
+        """Entered when classify() said "artwork". Runs a ReAct-style
+        tool-calling loop (up to 5 iterations) against ARTWORK_TOOLS,
+        injecting known visitor preferences as extra context, until the
+        model answers without requesting another tool call."""
         messages = [GALLERY_SYSTEM] + _trim(list(state["messages"]))
 
         prefs = state.get("user_prefs", {})
@@ -118,6 +147,8 @@ class PaintboxAgent:
     # -----------------------------------------------------------------------
 
     def general_chat(self, state: AgentState) -> dict:
+        """Entered when classify() said "general". A single plain Haiku
+        reply for small talk or off-topic messages — no tools involved."""
         messages = [GENERAL_SYSTEM] + _trim(list(state["messages"]))
         response = self._llm_chat.invoke(messages)
         return {"messages": [response]}
@@ -127,6 +158,8 @@ class PaintboxAgent:
     # -----------------------------------------------------------------------
 
     def commission_intake(self, state: AgentState) -> dict:
+        """Entered when classify() said "commission". No LLM call — just
+        a fixed reply pointing the visitor at the commissions page."""
         reply = AIMessage(content=(
             "I'd love to help you get a commission started! You can fill in all the details "
             "on Ragini's commissions page: "
@@ -139,6 +172,10 @@ class PaintboxAgent:
     # -----------------------------------------------------------------------
 
     def extract_preferences(self, state: AgentState) -> dict:
+        """Runs after every branch (react_node/general_chat/
+        commission_intake) converges. Asks the extractor LLM to pull any
+        liked series, mentioned artworks, or tone out of the last few
+        turns, and merges them into the existing prefs dict."""
         messages = state["messages"]
         recent = messages[-4:]
         conversation_text = "\n".join(
@@ -176,6 +213,8 @@ class PaintboxAgent:
     # -----------------------------------------------------------------------
 
     def save_preferences(self, state: AgentState) -> dict:
+        """Last node before END. Persists the (possibly updated) prefs
+        dict via db.py so the next turn's load_preferences() sees it."""
         thread_id = state.get("thread_id", "")
         prefs = state.get("user_prefs", {})
         if thread_id and prefs:
@@ -187,6 +226,9 @@ class PaintboxAgent:
     # -----------------------------------------------------------------------
 
     def route_intent(self, state: AgentState) -> str:
+        """Conditional-edge function registered on the "classify" node in
+        agent/graph.py — maps state["intent"] to the name of the next
+        node to run."""
         intent = state.get("intent", "general")
         if intent == "commission":
             return "commission_intake"

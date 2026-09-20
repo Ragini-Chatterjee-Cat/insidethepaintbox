@@ -1,8 +1,21 @@
-"""Shared singletons for all artwork tools."""
+"""
+Shared singletons and constants for the artwork tool classes.
+
+Purpose: every tool in this package needs the same Chroma collection,
+the same embedding function, and the same series-URL/commission text —
+this file is where those live once instead of being redefined per tool.
+
+Imported by: every file in tools/ (search_artworks.py, get_artwork_details.py,
+filter_by_series.py, recommend_similar.py, commission_info.py,
+reveal_secret.py). Not called directly — these are module-level values,
+resolved once on first import and reused for the life of the process.
+"""
 from rag import collection, embed_query
 
+# --- shared values ------------------------------------------------------
+
 BASE_URL = "https://insidethepaintbox.netlify.app"
-CONFIDENCE_THRESHOLD = 1.5
+CONFIDENCE_THRESHOLD = 1.5  # Chroma distance above this = "not a real match"
 
 SERIES_URLS = {
     "Portraits":        f"{BASE_URL}/pages/series/portraits.html",

@@ -1,15 +1,31 @@
-"""Postgres persistence for user prefs.
-Falls back to JSON files on disk when POSTGRES_URI is not set (local dev)."""
+"""
+Postgres persistence for visitor preferences (liked series, mentioned
+artworks, tone), with a JSON-file fallback when Postgres isn't configured.
+
+Purpose: this is the only place that reads or writes the `user_prefs`
+table (or its per-thread JSON file equivalent) — LangGraph's own message
+history is persisted separately, by its Postgres/Memory checkpointer in
+agent/graph.py, not by this module.
+
+Imported by: app.py (setup_tables(), called once at startup) and
+agent/nodes.py (load_user_prefs()/save_user_prefs(), called on every
+graph run by the load_preferences and save_preferences nodes).
+"""
 
 import json
 import logging
 import os
 from pathlib import Path
 
-_conn = None
+_conn = None  # module-level cache: one connection reused across calls
 
+
+# --- connection handling -----------------------------------------------
 
 def _get_conn():
+    """Return a live Postgres connection, or None if POSTGRES_URI isn't
+    set or the connection can't be made. Reuses the cached connection
+    when it's still alive; reconnects once if it's gone stale."""
     global _conn
     uri = os.environ.get("POSTGRES_URI")
     if not uri:
@@ -32,6 +48,9 @@ def _get_conn():
 
 
 def setup_tables():
+    """Create the user_prefs table if it doesn't exist yet. No-op when
+    Postgres isn't configured (there's no table to create for the JSON
+    fallback — each thread just gets its own file on demand)."""
     conn = _get_conn()
     if not conn:
         return
@@ -44,7 +63,11 @@ def setup_tables():
     """)
 
 
+# --- reading and writing preferences ------------------------------------
+
 def load_user_prefs(thread_id: str, prefs_dir: Path) -> dict:
+    """Return this thread's saved preferences dict, or {} if none exist
+    yet. Tries Postgres first, falls back to prefs_dir/<thread_id>.json."""
     conn = _get_conn()
     if conn:
         try:
@@ -59,6 +82,8 @@ def load_user_prefs(thread_id: str, prefs_dir: Path) -> dict:
 
 
 def save_user_prefs(thread_id: str, prefs: dict, prefs_dir: Path):
+    """Persist this thread's preferences dict. Upserts into Postgres if
+    configured, otherwise overwrites prefs_dir/<thread_id>.json."""
     conn = _get_conn()
     if conn:
         try:

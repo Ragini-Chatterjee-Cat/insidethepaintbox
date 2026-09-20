@@ -1,6 +1,15 @@
 """
-Document Loader for Inside the Paintbox
-Extracts artwork information from HTML files
+Document Loader for Inside the Paintbox — extracts artwork documents from
+the frontend's static HTML files for indexing.
+
+Purpose: turns each artwork/series/about page into a dict rag.py can embed
+and store — this is the only place that parses the site's HTML, and the
+only place that decides what counts as "content" for the chatbot to know.
+
+Imported by: app.py (load_all_artworks()/load_about_page(), called at
+startup and by the /reindex endpoint) and tools/filter_by_series.py
+(SERIES_ARTWORK_MAP, to list a series' known artworks even when Chroma
+has no metadata for them yet).
 """
 
 from pathlib import Path
@@ -10,6 +19,7 @@ import re
 
 from bs4 import BeautifulSoup
 
+# --- series membership ---------------------------------------------------
 
 # Maps series names to the artwork filenames that belong to them.
 # Built from the links on each series page in /pages/series/.
@@ -85,6 +95,8 @@ def get_artwork_series(html_path) -> str:
     return _ARTWORK_TO_SERIES.get(filename, "")
 
 
+# --- secret/hidden artworks ------------------------------------------------
+
 # Pages that exist but aren't linked from anywhere on the site. Not surfaced
 # by ordinary search or browsing — only revealed if a visitor explicitly
 # asks about something secret/hidden (see tools/reveal_secret.py).
@@ -100,8 +112,11 @@ def is_secret_artwork(html_path) -> bool:
     return Path(html_path).name.lower() in SECRET_ARTWORKS
 
 
+# --- text/URL helpers -------------------------------------------------------
+
 def clean_text(text: Optional[str]) -> str:
-    """Clean extracted text by removing extra whitespace"""
+    """Collapse any run of whitespace/newlines in `text` down to single
+    spaces and trim the ends. Returns "" for falsy input."""
     if not text:
         return ""
     # Remove extra whitespace and newlines
@@ -110,7 +125,9 @@ def clean_text(text: Optional[str]) -> str:
 
 
 def get_artwork_url(html_path, website_path) -> str:
-    """Generate the URL for an artwork page based on file path"""
+    """Turn a local file path into the artwork's public Netlify URL, by
+    finding html_path's location relative to website_path and appending
+    it to the site's base URL."""
     # Resolve both paths to absolute so relative_to works reliably
     html_path = Path(html_path).resolve()
     website_path = Path(website_path).resolve()
@@ -129,8 +146,12 @@ def get_artwork_url(html_path, website_path) -> str:
     return f"{base_url}/{url_path}"
 
 
+# --- main extraction --------------------------------------------------------
+
 def load_artwork_from_html(html_path, website_path="../") -> Optional[Dict]:
-    """Extract artwork information from a single HTML file"""
+    """Parse one HTML file into a document dict ready for rag.index_documents():
+    title, subtitle, description, series, image paths, secret flag, and a
+    combined `content` string. Returns None if the file can't be read/parsed."""
     try:
         with open(html_path, 'r', encoding='utf-8') as f:
             soup = BeautifulSoup(f.read(), 'html.parser')
@@ -199,8 +220,11 @@ URL: {url}
         return None
 
 
+# --- batch loaders (called at startup and by /reindex) ----------------------
+
 def load_all_artworks(website_path) -> List[Dict]:
-    """Load all artwork documents from the website"""
+    """Load every page under artworks/ plus every series page under
+    pages/series/, skipping any file that fails to parse."""
     documents = []
     website_path = Path(website_path)
 
@@ -230,7 +254,8 @@ def load_all_artworks(website_path) -> List[Dict]:
 
 
 def load_about_page(website_path) -> Optional[Dict]:
-    """Load the about page for artist information"""
+    """Load pages/about.html as its own document, retitled "About the
+    Artist" so it reads clearly in search results."""
     about_path = Path(website_path) / "pages" / "about.html"
     if about_path.exists():
         doc = load_artwork_from_html(about_path, website_path)
@@ -239,6 +264,8 @@ def load_about_page(website_path) -> Optional[Dict]:
             return doc
     return None
 
+
+# --- manual test (`python3 document_loader.py`) -----------------------------
 
 if __name__ == "__main__":
     # Test the loader

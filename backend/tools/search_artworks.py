@@ -1,4 +1,17 @@
-"""SearchArtworksTool — semantic search over the artwork collection."""
+"""
+SearchArtworksTool — semantic search over the artwork collection.
+
+Purpose: lets the agent browse by mood/theme/style ("something dark and
+emotional") rather than by exact title, using the same multimodal
+embedding the collection was indexed with.
+
+Called by: nothing in this codebase calls it directly. It's registered in
+tools/__init__.py's ARTWORK_TOOLS list, bound to the LLM in
+agent/nodes.py's PaintboxAgent.__init__(), and invoked by LangGraph's
+ToolNode inside PaintboxAgent.react_node() whenever the model decides
+(from this class's `description` below) that a visitor's message calls
+for a general/thematic search rather than a named lookup.
+"""
 from langchain_core.tools import BaseTool, ToolException
 from pydantic import BaseModel, Field
 from .base import collection, embed_query, CONFIDENCE_THRESHOLD
@@ -21,6 +34,9 @@ class SearchArtworksTool(BaseTool):
     handle_tool_error: bool = True
 
     def _run(self, query: str) -> str:
+        """Embed `query`, return up to 5 confidently-matching (non-secret)
+        artworks as a formatted text block, or a fallback message if
+        nothing clears CONFIDENCE_THRESHOLD."""
         query_embedding = embed_query(query)
         results = collection.query(
             query_embeddings=[query_embedding],

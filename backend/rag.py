@@ -1,11 +1,20 @@
 """
-RAG (Retrieval-Augmented Generation) Module
-Handles document indexing and embedding. Retrieval and generation for
-chat happen in the LangGraph agent (see agent/nodes.py, tools/).
+RAG (Retrieval-Augmented Generation) Module — document indexing and embedding.
+
+Purpose: the only place that talks to Voyage AI (embeddings) and ChromaDB
+(vector storage). Retrieval and generation for chat happen elsewhere, in
+the LangGraph agent (agent/nodes.py) and the tool classes (tools/) —
+this module just builds and maintains the searchable index they query.
 
 Embeddings are multimodal (text + image) via Voyage AI's voyage-multimodal-3,
 so a search like "something dark and emotional" can match an artwork's actual
 image, not just whatever its written description happens to say.
+
+Imported by:
+  - app.py: index_documents()/get_collection_stats(), called at startup
+    (in the background) and by the /reindex and /stats endpoints.
+  - tools/base.py: collection + embed_query, re-exported to every tool
+    class for their own similarity searches at chat time.
 """
 
 import hashlib
@@ -29,6 +38,8 @@ if not _voyage_api_key:
 _voyage_client = voyageai.Client(api_key=_voyage_api_key)
 
 
+# --- embedding -----------------------------------------------------------
+
 def embed_document(text: str, image_paths: Optional[List[str]] = None) -> List[float]:
     """Embed a document for indexing, folding in all of its images when
     available (a piece like Head in the Clouds has more than one)."""
@@ -51,6 +62,8 @@ def embed_query(text: str) -> List[float]:
     )
     return result.embeddings[0]
 
+
+# --- Chroma collection + content-change detection -------------------------
 
 chroma_client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
 collection = chroma_client.get_or_create_collection(
@@ -133,6 +146,8 @@ def index_documents(documents: List[Dict], force: bool = False) -> int:
     print(f"Indexed {indexed}/{len(documents)} documents")
     return indexed
 
+
+# --- stats -----------------------------------------------------------------
 
 def get_collection_stats() -> Dict:
     """Return the current document count and collection name."""
