@@ -148,11 +148,6 @@ document.addEventListener('DOMContentLoaded', function() {
             typingIndicator.remove();
             addMessage(data.response, 'bot');
 
-            // If this was a commission confirmation, start polling for Ragini's reply
-            if (data.response.includes("passed everything on to Ragini")) {
-                startReplyPolling(threadId);
-            }
-
         } catch (error) {
             console.error('Chat error:', error);
             typingIndicator.remove();
@@ -235,37 +230,6 @@ document.addEventListener('DOMContentLoaded', function() {
         chatBody.appendChild(typingDiv);
         chatBody.scrollTop = chatBody.scrollHeight;
         return typingDiv;
-    }
-
-    /**
-     * Poll for Ragini's personal reply after a commission is submitted.
-     * Checks every 30 seconds, stops after 30 minutes or when a reply arrives.
-     */
-    function startReplyPolling(tid) {
-        const maxAttempts = 60; // 30 min at 30s intervals
-        let attempts = 0;
-
-        const interval = setInterval(async () => {
-            attempts++;
-            if (attempts > maxAttempts) {
-                clearInterval(interval);
-                return;
-            }
-            try {
-                const res = await fetch(`${API_URL}/chat/updates/${tid}`);
-                if (!res.ok) return;
-                const data = await res.json();
-                if (data.has_reply) {
-                    clearInterval(interval);
-                    addMessage(
-                        `💌 A personal note from Ragini:\n\n${data.message}`,
-                        'bot'
-                    );
-                }
-            } catch (_) {
-                // silently ignore network errors during polling
-            }
-        }, 30000);
     }
 
     /**

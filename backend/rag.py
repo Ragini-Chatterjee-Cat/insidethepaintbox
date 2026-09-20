@@ -20,12 +20,22 @@ Imported by:
 import hashlib
 import logging
 import os
+import random
+import time
 from pathlib import Path
 from typing import Dict, List, Optional
 
 import chromadb
 import voyageai
 from PIL import Image
+from voyageai.error import (
+    APIConnectionError,
+    RateLimitError,
+    ServerError,
+    ServiceUnavailableError,
+    Timeout,
+    TryAgain,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +47,43 @@ if not _voyage_api_key:
     raise ValueError("VOYAGE_API_KEY environment variable not set!")
 _voyage_client = voyageai.Client(api_key=_voyage_api_key)
 
+# Errors worth retrying: rate limits, timeouts, connection drops, and 5xx
+# server errors are all transient. AuthenticationError/InvalidRequestError/
+# MalformedRequestError are deliberately excluded — retrying a bad API key
+# or a malformed request just delays the same failure, and for indexing
+# (44+ documents) would multiply one permanent error into dozens of
+# wasted retry cycles.
+_RETRYABLE_VOYAGE_ERRORS = (
+    RateLimitError,
+    ServerError,
+    ServiceUnavailableError,
+    Timeout,
+    APIConnectionError,
+    TryAgain,
+)
+
 
 # --- embedding -----------------------------------------------------------
+
+def _voyage_embed(inputs: list, input_type: str, max_attempts: int = 4) -> list:
+    """Call Voyage's multimodal_embed with exponential backoff + jitter on
+    transient errors (max_attempts total tries: 1s, 2s, 4s between them).
+    Non-retryable errors (auth, bad request) raise immediately."""
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return _voyage_client.multimodal_embed(
+                inputs, model=EMBEDDING_MODEL_NAME, input_type=input_type
+            )
+        except _RETRYABLE_VOYAGE_ERRORS:
+            if attempt == max_attempts:
+                raise
+            delay = 2 ** (attempt - 1) + random.uniform(0, 0.5)
+            logger.warning(
+                "Voyage API call failed (attempt %d/%d), retrying in %.1fs",
+                attempt, max_attempts, delay,
+            )
+            time.sleep(delay)
+
 
 def embed_document(text: str, image_paths: Optional[List[str]] = None) -> List[float]:
     """Embed a document for indexing, folding in all of its images when
@@ -49,17 +94,13 @@ def embed_document(text: str, image_paths: Optional[List[str]] = None) -> List[f
             content.append(Image.open(image_path))
         except Exception:
             logger.exception("Could not open image %s; skipping it", image_path)
-    result = _voyage_client.multimodal_embed(
-        [content], model=EMBEDDING_MODEL_NAME, input_type="document"
-    )
+    result = _voyage_embed([content], input_type="document")
     return result.embeddings[0]
 
 
 def embed_query(text: str) -> List[float]:
     """Embed a search query (text only)."""
-    result = _voyage_client.multimodal_embed(
-        [[text]], model=EMBEDDING_MODEL_NAME, input_type="query"
-    )
+    result = _voyage_embed([[text]], input_type="query")
     return result.embeddings[0]
 
 
