@@ -158,14 +158,17 @@ def load_artwork_from_html(html_path, website_path="../"):
         headers = soup.find_all('h2')
         section_titles = " ".join([clean_text(h.get_text()) for h in headers])
 
-        # Locate the page's main image, if any, for multimodal embedding.
-        # src may be URL-encoded (e.g. "%20" for a space in the filename).
-        img_elem = soup.find('img')
-        image_path = None
-        if img_elem and img_elem.get('src'):
-            candidate = (Path(html_path).parent / unquote(img_elem['src'])).resolve()
-            if candidate.exists():
-                image_path = str(candidate)
+        # Locate every image on the page (some pieces, e.g. Head in the
+        # Clouds, show multiple) for multimodal embedding. src may be
+        # URL-encoded (e.g. "%20" for a space in the filename).
+        image_paths = []
+        for img_elem in soup.find_all('img'):
+            src = img_elem.get('src')
+            if not src:
+                continue
+            candidate = (Path(html_path).parent / unquote(src)).resolve()
+            if candidate.exists() and str(candidate) not in image_paths:
+                image_paths.append(str(candidate))
 
         # Generate URL for this artwork
         url = get_artwork_url(html_path, website_path)
@@ -191,7 +194,7 @@ URL: {url}
             "content": full_content,
             "source": str(html_path),
             "url": url,
-            "image_path": image_path,
+            "image_paths": image_paths,
             "secret": is_secret_artwork(html_path),
         }
     except Exception as e:

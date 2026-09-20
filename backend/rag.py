@@ -29,14 +29,15 @@ if not _voyage_api_key:
 _voyage_client = voyageai.Client(api_key=_voyage_api_key)
 
 
-def embed_document(text: str, image_path: Optional[str] = None) -> List[float]:
-    """Embed a document for indexing, folding in its image when available."""
+def embed_document(text: str, image_paths: Optional[List[str]] = None) -> List[float]:
+    """Embed a document for indexing, folding in all of its images when
+    available (a piece like Head in the Clouds has more than one)."""
     content = [text]
-    if image_path:
+    for image_path in image_paths or []:
         try:
             content.append(Image.open(image_path))
         except Exception:
-            logger.exception("Could not open image %s; embedding text only", image_path)
+            logger.exception("Could not open image %s; skipping it", image_path)
     result = _voyage_client.multimodal_embed(
         [content], model=EMBEDDING_MODEL_NAME, input_type="document"
     )
@@ -70,8 +71,7 @@ def _content_signature(documents: List[Dict]) -> str:
     hasher.update(EMBEDDING_MODEL_NAME.encode("utf-8"))
     for doc in sorted(documents, key=lambda d: d.get("source", "")):
         hasher.update(doc.get("content", "").encode("utf-8"))
-        image_path = doc.get("image_path")
-        if image_path:
+        for image_path in doc.get("image_paths") or []:
             try:
                 hasher.update(Path(image_path).read_bytes())
             except OSError:
@@ -84,8 +84,8 @@ def index_documents(documents: List[Dict], force: bool = False) -> int:
     the content is unchanged since the last index (skip check bypassed by
     force=True, used by the manual /reindex endpoint).
 
-    Each document must have a "content" key and may have an "image_path"
-    key; "title", "source", "subtitle", "url", and "series" are stored as
+    Each document must have a "content" key and may have an "image_paths"
+    list; "title", "source", "subtitle", "url", and "series" are stored as
     metadata if present. Returns the number of documents indexed (or the
     existing count, if skipped).
     """
@@ -106,7 +106,7 @@ def index_documents(documents: List[Dict], force: bool = False) -> int:
     indexed = 0
     for i, doc in enumerate(documents):
         try:
-            embedding = embed_document(doc["content"], doc.get("image_path"))
+            embedding = embed_document(doc["content"], doc.get("image_paths"))
             collection.add(
                 documents=[doc["content"]],
                 embeddings=[embedding],
