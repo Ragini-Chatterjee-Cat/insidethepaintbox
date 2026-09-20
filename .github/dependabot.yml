@@ -1,0 +1,19 @@
+version: 2
+updates:
+  # Backend Python dependencies (pyproject.toml / uv.lock)
+  - package-ecosystem: "uv"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+
+  # Base image in the Dockerfile (python:3.11-slim)
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  # This repo's own CI workflow actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

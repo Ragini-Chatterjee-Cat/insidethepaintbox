@@ -6,10 +6,14 @@ COPY --from=ghcr.io/astral-sh/uv:0.12.17 /uv /uvx /usr/local/bin/
 
 WORKDIR /app/backend
 
+# UV_NO_DEV skips dev-only deps (pytest, ruff) in the production image -
+# this is uv's documented flag for it; there's no direct `sync --no-dev` CLI flag.
+ENV UV_NO_DEV=1
+
 # Copy only the dependency manifest first so this layer stays cached across
 # rebuilds unless pyproject.toml/uv.lock actually change.
 COPY backend/pyproject.toml backend/uv.lock ./
-RUN uv sync --locked --no-install-project --no-dev
+RUN uv sync --locked --no-install-project
 
 # Copy entire project (backend needs access to ../frontend for document
 # loading). .dockerignore keeps this from pulling in a host-built .venv.

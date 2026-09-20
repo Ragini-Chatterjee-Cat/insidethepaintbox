@@ -1,0 +1,58 @@
+name: CI
+
+# Runs on every push and PR that touches the backend, so lint/test failures
+# show up before Railway ever sees them. Deployment itself stays with
+# Railway's own git-push auto-deploy - this workflow is a gate, not a
+# second deploy pipeline.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "Dockerfile"
+      - ".github/workflows/ci.yml"
+  pull_request:
+    paths:
+      - "backend/**"
+      - "Dockerfile"
+      - ".github/workflows/ci.yml"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.12.17"
+      - name: Install dependencies
+        working-directory: backend
+        run: uv sync --locked --all-groups
+      - name: ruff check
+        working-directory: backend
+        run: uv run ruff check .
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.12.17"
+      - name: Install dependencies
+        working-directory: backend
+        run: uv sync --locked --all-groups
+      - name: pytest
+        working-directory: backend
+        run: uv run pytest -v
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image (not pushed - just confirms the Dockerfile works)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: false
