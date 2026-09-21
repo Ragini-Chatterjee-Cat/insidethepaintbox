@@ -51,7 +51,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build image (not pushed - just confirms the Dockerfile works)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile
