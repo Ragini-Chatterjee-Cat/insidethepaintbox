@@ -191,7 +191,7 @@ class PaintboxAgent:
         conversation_text = "\n".join(
             f"{type(m).__name__}: {m.content}"
             for m in recent
-            if isinstance(m, (HumanMessage, AIMessage)) and m.content
+            if isinstance(m, HumanMessage | AIMessage) and m.content
         )
 
         if not conversation_text.strip():
