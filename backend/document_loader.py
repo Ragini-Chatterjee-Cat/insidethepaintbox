@@ -49,12 +49,10 @@ SERIES_ARTWORK_MAP = {
         "Draconic.html",
         "from-the-ashes.html",
         "head-in-the-clouds.html",
-        "icarus.html",
     ],
     "Thoughts": [
         "whine.html",
         "hurt.html",
-        "Trapped.html",
         "Voices.html",
         "Flowers.html",
         "behind-the-tiger.html",
