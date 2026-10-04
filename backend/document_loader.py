@@ -43,7 +43,7 @@ SERIES_ARTWORK_MAP = {
         "hippo.html",
     ],
     "Mythical": [
-        "R.html",
+        "icarus.html",
         "myth.html",
         "athena.html",
         "Draconic.html",
