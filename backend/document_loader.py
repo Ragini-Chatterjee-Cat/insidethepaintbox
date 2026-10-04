@@ -97,11 +97,7 @@ def get_artwork_series(html_path) -> str:
 # Pages that exist but aren't linked from anywhere on the site. Not surfaced
 # by ordinary search or browsing — only revealed if a visitor explicitly
 # asks about something secret/hidden (see tools/reveal_secret.py).
-SECRET_ARTWORKS = {
-    "bibbity.html",
-    "bare.html",
-    "saree.html",
-}
+SECRET_ARTWORKS = set()
 
 
 def is_secret_artwork(html_path) -> bool:

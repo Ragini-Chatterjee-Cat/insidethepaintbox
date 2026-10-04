@@ -1,6 +1,7 @@
 """Tests for document_loader.py - HTML parsing into indexable documents."""
 from pathlib import Path
 
+import document_loader
 from document_loader import (
     clean_text,
     get_artwork_series,
@@ -54,9 +55,10 @@ def test_get_artwork_series_matches_known_filenames():
     assert get_artwork_series("some/path/not-a-real-artwork.html") == ""
 
 
-def test_is_secret_artwork():
-    assert is_secret_artwork("frontend/artworks/misc/Bibbity.html") is True
-    assert is_secret_artwork("frontend/artworks/misc/bibbity.html") is True
+def test_is_secret_artwork(monkeypatch):
+    monkeypatch.setattr(document_loader, "SECRET_ARTWORKS", {"hidden.html"})
+    assert is_secret_artwork("frontend/artworks/misc/Hidden.html") is True
+    assert is_secret_artwork("frontend/artworks/misc/hidden.html") is True
     assert is_secret_artwork("frontend/artworks/mythical/icarus.html") is False
 
 
