@@ -14,6 +14,7 @@ import logging
 
 from langchain_core.messages import AIMessage, HumanMessage
 
+import db
 from .graph import compiled_graph
 from .nodes import PREFS_DIR
 
@@ -53,12 +54,8 @@ def get_conversation_history(thread_id: str) -> list[dict]:
 
 
 def clear_conversation(thread_id: str) -> bool:
-    """Delete `thread_id`'s saved preferences file. Note: only clears the
-    JSON-fallback prefs file — if POSTGRES_URI is set, prefs live in
-    Postgres instead and this is currently a no-op for them, and either
-    way the graph's own message history (in the checkpointer) is
-    untouched by this call."""
-    prefs_file = PREFS_DIR / f"{thread_id}.json"
-    if prefs_file.exists():
-        prefs_file.unlink()
+    """Delete `thread_id`'s saved preferences (Postgres row or JSON file,
+    whichever is active) and its message history in the checkpointer."""
+    db.delete_user_prefs(thread_id, PREFS_DIR)
+    compiled_graph.checkpointer.delete_thread(thread_id)
     return True

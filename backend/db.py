@@ -99,3 +99,18 @@ def save_user_prefs(thread_id: str, prefs: dict, prefs_dir: Path):
     (prefs_dir / f"{thread_id}.json").write_text(json.dumps(prefs, indent=2))
 
 
+def delete_user_prefs(thread_id: str, prefs_dir: Path):
+    """Delete this thread's saved preferences. Removes the Postgres row if
+    configured, otherwise the prefs_dir/<thread_id>.json file."""
+    conn = _get_conn()
+    if conn:
+        try:
+            conn.execute("DELETE FROM user_prefs WHERE thread_id = %s", (thread_id,))
+            return
+        except Exception as e:
+            logging.warning(f"delete_user_prefs DB error: {e}")
+    f = prefs_dir / f"{thread_id}.json"
+    if f.exists():
+        f.unlink()
+
+

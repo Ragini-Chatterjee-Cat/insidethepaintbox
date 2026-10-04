@@ -113,8 +113,7 @@ backend/
 |   |-- reveal_secret_artwork    hidden pieces, only if explicitly asked
 |   +-- base.py                  shared collection/embed_query/constants
 |
-|-- requirements.txt          Python dependencies
-|-- Dockerfile / nixpacks.toml  container build (Railway)
+|-- pyproject.toml            Python dependencies (uv)
 +-- chroma_db/                 vector database storage (persisted via a
                                 Railway volume mounted at
                                 /app/backend/chroma_db - see below)
@@ -162,7 +161,7 @@ shoved into it.
 
 ```bash
 cd backend
-pip install -r requirements.txt
+uv sync --all-groups
 ```
 
 Required environment variables (put them in `backend/.env` - it's
@@ -180,7 +179,7 @@ gitignored):
 Then:
 
 ```bash
-uvicorn app:app --reload --port 8000
+uv run uvicorn app:app --reload --port 8000
 ```
 
 The first request after startup may see an empty or partial artwork
