@@ -4,7 +4,7 @@ version = "1.0.0"
 description = "LangGraph chat agent backend for Inside the Paintbox"
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi==0.141.1",
+    "fastapi==0.142.4",
     "slowapi==0.1.10",
     "uvicorn==0.53.0",
     "chromadb==1.4.1",
