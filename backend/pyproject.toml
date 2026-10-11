@@ -9,7 +9,7 @@ dependencies = [
     "uvicorn==0.53.0",
     "chromadb==1.4.1",
     "voyageai==0.5.0",
-    "pillow==10.4.0",
+    "pillow==12.3.0",
     "beautifulsoup4==4.15.0",
     "python-dotenv==1.2.4",
     "langgraph>=1.0.0",
