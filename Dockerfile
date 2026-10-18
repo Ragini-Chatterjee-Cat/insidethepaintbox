@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.14-slim
 
 # Pinned uv binary, copied straight from astral's distroless image - no pip
 # install step needed just to get the installer itself.
