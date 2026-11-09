@@ -32,6 +32,13 @@ CONFIDENCE_THRESHOLD = 1.5
 # kept but flagged weak, and the model is told to present it as such.
 RERANK_MIN_SCORE = 0.3
 RERANK_STRONG_SCORE = 0.55
+# Name lookups ("tell me about the phoenix one") accept a reranked guess that
+# is strong, or decent and clearly ahead of the runner-up. Filler words drag
+# real references down ("the phoenix one" -> From the Ashes 0.54 vs 0.47
+# next), while names that don't exist produce near-ties between unrelated
+# pieces ("Beyonce" 0.37 vs 0.35, "the self portrait" 0.50 vs 0.49).
+RERANK_LOOKUP_MIN_SCORE = 0.45
+RERANK_CLEAR_LEAD = 0.05
 N_CANDIDATES = 20  # vector-search candidates handed to the reranker
 
 # Filenames here must match frontend/pages/series/ exactly - Netlify's
@@ -114,7 +121,7 @@ def find_relevant(query: str, n_candidates: int = N_CANDIDATES, include_overview
 def resolve_artwork(name: str) -> dict | None:
     """Find the one artwork a visitor means by `name`: an exact title match,
     then a unique partial one ("Athena" -> ATHENIAN), else the reranker's
-    best guess if it's a strong match ("the pandora one", "phoenix").
+    best guess if it's convincing ("the pandora one", "the phoenix one").
     Returns None rather than guess - a weak best guess for a piece that
     doesn't exist ("Beyonce") would hand back an unrelated artwork."""
     name_lower = name.lower().strip()
@@ -134,7 +141,17 @@ def resolve_artwork(name: str) -> dict | None:
     ]
     if len(partial) == 1:
         return partial[0]
-    matches = find_relevant(name, n_candidates=10, include_overviews=True)
-    if matches and (matches[0]["score"] is None or matches[0]["score"] >= RERANK_STRONG_SCORE):
-        return matches[0]
+    # Series overview pages are never "the artwork" a visitor means - and
+    # names that don't exist tend to land on them ("the Mona Lisa" -> PORTRAITS).
+    matches = find_relevant(name, n_candidates=10)
+    if not matches:
+        return None
+    best = matches[0]
+    if best["score"] is None:  # reranker unavailable: distance cutoff already applied
+        return best
+    runner_up = matches[1]["score"] if len(matches) > 1 else 0.0
+    if best["score"] >= RERANK_STRONG_SCORE or (
+        best["score"] >= RERANK_LOOKUP_MIN_SCORE and best["score"] - runner_up >= RERANK_CLEAR_LEAD
+    ):
+        return best
     return None
