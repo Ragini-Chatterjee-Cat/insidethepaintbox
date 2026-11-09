@@ -13,6 +13,7 @@ in the compiled graph; LangGraph calls them itself as the graph runs,
 nothing here is called directly by app.py or any other module.
 """
 import json
+import logging
 import os
 from pathlib import Path
 
@@ -202,9 +203,16 @@ class PaintboxAgent:
             HumanMessage(content=conversation_text),
         ])
 
+        # Haiku often wraps its JSON in a ```json ... ``` fence even when told
+        # not to - parsing the reply as-is then failed on every turn, so no
+        # preferences were saved after the switch to Claude. Parse only the
+        # outermost {...} instead, and log anything that still doesn't parse
+        # rather than failing silently again.
+        raw = result.content.strip()
         try:
-            extracted = json.loads(result.content.strip())
+            extracted = json.loads(raw[raw.find("{"):raw.rfind("}") + 1] or raw)
         except (json.JSONDecodeError, ValueError):
+            logging.warning("extract_preferences: unparseable extractor reply: %.200r", raw)
             return {}
 
         if not isinstance(extracted, dict):

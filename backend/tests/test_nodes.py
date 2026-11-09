@@ -132,6 +132,26 @@ def test_extract_preferences_returns_empty_dict_on_invalid_json(monkeypatch):
     assert agent.extract_preferences(state) == {}
 
 
+def test_extract_preferences_parses_json_wrapped_in_a_code_fence(monkeypatch):
+    """Regression test: Haiku wraps its JSON in ```json fences despite the
+    prompt, and json.loads() on the raw reply failed every turn - so no
+    preferences were saved at all from the switch to Claude onward."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    agent = PaintboxAgent()
+    agent._llm_extractor = MagicMock()
+    agent._llm_extractor.invoke.return_value = AIMessage(content=(
+        '```json\n{"liked_series": ["Mythical"], "mentioned_artworks": ["Icarus"], '
+        '"tone": "curious"}\n```'
+    ))
+
+    state = {"messages": [HumanMessage(content="I love Icarus")], "user_prefs": {}}
+    assert agent.extract_preferences(state) == {"user_prefs": {
+        "liked_series": ["Mythical"],
+        "mentioned_artworks": ["Icarus"],
+        "tone": "curious",
+    }}
+
+
 def test_extract_preferences_returns_empty_dict_on_valid_but_non_dict_json(monkeypatch):
     """Regression test: `null` or `[]` parse successfully as JSON, so the
     old except (JSONDecodeError, ValueError) block never caught them - the
