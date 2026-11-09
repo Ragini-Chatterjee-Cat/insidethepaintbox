@@ -132,6 +132,26 @@ def test_extract_preferences_returns_empty_dict_on_invalid_json(monkeypatch):
     assert agent.extract_preferences(state) == {}
 
 
+def test_extract_preferences_parses_json_wrapped_in_a_code_fence(monkeypatch):
+    """Regression test: Haiku wraps its JSON in ```json fences despite the
+    prompt, and json.loads() on the raw reply failed every turn - so no
+    preferences were saved at all from the switch to Claude onward."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    agent = PaintboxAgent()
+    agent._llm_extractor = MagicMock()
+    agent._llm_extractor.invoke.return_value = AIMessage(content=(
+        '```json\n{"liked_series": ["Mythical"], "mentioned_artworks": ["Icarus"], '
+        '"tone": "curious"}\n```'
+    ))
+
+    state = {"messages": [HumanMessage(content="I love Icarus")], "user_prefs": {}}
+    assert agent.extract_preferences(state) == {"user_prefs": {
+        "liked_series": ["Mythical"],
+        "mentioned_artworks": ["Icarus"],
+        "tone": "curious",
+    }}
+
+
 def test_extract_preferences_returns_empty_dict_on_valid_but_non_dict_json(monkeypatch):
     """Regression test: `null` or `[]` parse successfully as JSON, so the
     old except (JSONDecodeError, ValueError) block never caught them - the
@@ -175,3 +195,17 @@ def test_route_intent_maps_each_intent_to_its_node():
     assert agent.route_intent({"intent": "artwork"}) == "react_node"
     assert agent.route_intent({"intent": "general"}) == "general_chat"
     assert agent.route_intent({}) == "general_chat"  # missing intent defaults safely
+
+
+def test_preferences_follow_the_visitor_across_conversations(monkeypatch, tmp_path):
+    """Prefs are keyed by visitor_id, not thread_id - so starting a new
+    conversation (a new thread) still loads what was learned earlier."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setattr("agent.nodes.PREFS_DIR", tmp_path)
+    agent = PaintboxAgent()
+    prefs = {"liked_series": ["Mythical"], "mentioned_artworks": [], "tone": "curious"}
+
+    agent.save_preferences({"thread_id": "thread-1", "visitor_id": "visitor-1", "user_prefs": prefs})
+    loaded = agent.load_preferences({"thread_id": "thread-2", "visitor_id": "visitor-1"})
+
+    assert loaded == {"user_prefs": prefs}

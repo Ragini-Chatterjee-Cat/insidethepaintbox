@@ -3,7 +3,7 @@ Postgres persistence for visitor preferences (liked series, mentioned
 artworks, tone), with a JSON-file fallback when Postgres isn't configured.
 
 Purpose: this is the only place that reads or writes the `user_prefs`
-table (or its per-thread JSON file equivalent) — LangGraph's own message
+table (or its per-visitor JSON file equivalent) — LangGraph's own message
 history is persisted separately, by its Postgres/Memory checkpointer in
 agent/graph.py, not by this module.
 
@@ -50,10 +50,14 @@ def _get_conn():
 def setup_tables():
     """Create the user_prefs table if it doesn't exist yet. No-op when
     Postgres isn't configured (there's no table to create for the JSON
-    fallback — each thread just gets its own file on demand)."""
+    fallback — each visitor just gets its own file on demand)."""
     conn = _get_conn()
     if not conn:
         return
+    # The key column is still named thread_id: prefs used to be stored per
+    # conversation, and renaming it would need a migration on the live DB.
+    # It now holds visitor ids (chat.js seeds a returning browser's visitor
+    # id from its old thread id, so rows saved before the switch still match).
     conn.execute("""
         CREATE TABLE IF NOT EXISTS user_prefs (
             thread_id TEXT PRIMARY KEY,
@@ -65,25 +69,25 @@ def setup_tables():
 
 # --- reading and writing preferences ------------------------------------
 
-def load_user_prefs(thread_id: str, prefs_dir: Path) -> dict:
-    """Return this thread's saved preferences dict, or {} if none exist
-    yet. Tries Postgres first, falls back to prefs_dir/<thread_id>.json."""
+def load_user_prefs(visitor_id: str, prefs_dir: Path) -> dict:
+    """Return this visitor's saved preferences dict, or {} if none exist
+    yet. Tries Postgres first, falls back to prefs_dir/<visitor_id>.json."""
     conn = _get_conn()
     if conn:
         try:
             row = conn.execute(
-                "SELECT prefs FROM user_prefs WHERE thread_id = %s", (thread_id,)
+                "SELECT prefs FROM user_prefs WHERE thread_id = %s", (visitor_id,)
             ).fetchone()
             return row[0] if row else {}
         except Exception as e:
             logging.warning(f"load_user_prefs DB error: {e}")
-    f = prefs_dir / f"{thread_id}.json"
+    f = prefs_dir / f"{visitor_id}.json"
     return json.loads(f.read_text()) if f.exists() else {}
 
 
-def save_user_prefs(thread_id: str, prefs: dict, prefs_dir: Path):
-    """Persist this thread's preferences dict. Upserts into Postgres if
-    configured, otherwise overwrites prefs_dir/<thread_id>.json."""
+def save_user_prefs(visitor_id: str, prefs: dict, prefs_dir: Path):
+    """Persist this visitor's preferences dict. Upserts into Postgres if
+    configured, otherwise overwrites prefs_dir/<visitor_id>.json."""
     conn = _get_conn()
     if conn:
         try:
@@ -92,25 +96,10 @@ def save_user_prefs(thread_id: str, prefs: dict, prefs_dir: Path):
                 VALUES (%s, %s::jsonb, NOW())
                 ON CONFLICT (thread_id) DO UPDATE
                     SET prefs = EXCLUDED.prefs, updated_at = NOW()
-            """, (thread_id, json.dumps(prefs)))
+            """, (visitor_id, json.dumps(prefs)))
             return
         except Exception as e:
             logging.warning(f"save_user_prefs DB error: {e}")
-    (prefs_dir / f"{thread_id}.json").write_text(json.dumps(prefs, indent=2))
-
-
-def delete_user_prefs(thread_id: str, prefs_dir: Path):
-    """Delete this thread's saved preferences. Removes the Postgres row if
-    configured, otherwise the prefs_dir/<thread_id>.json file."""
-    conn = _get_conn()
-    if conn:
-        try:
-            conn.execute("DELETE FROM user_prefs WHERE thread_id = %s", (thread_id,))
-            return
-        except Exception as e:
-            logging.warning(f"delete_user_prefs DB error: {e}")
-    f = prefs_dir / f"{thread_id}.json"
-    if f.exists():
-        f.unlink()
+    (prefs_dir / f"{visitor_id}.json").write_text(json.dumps(prefs, indent=2))
 
 

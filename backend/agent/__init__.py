@@ -14,19 +14,22 @@ import logging
 
 from langchain_core.messages import AIMessage, HumanMessage
 
-import db
-
 from .graph import compiled_graph
-from .nodes import PREFS_DIR
 
 
-def chat_with_memory(message: str, thread_id: str) -> str:
+def chat_with_memory(message: str, thread_id: str, visitor_id: str) -> str:
     """Run one full turn of the graph for `thread_id` and return the
-    assistant's reply text (the last AIMessage the graph produced)."""
+    assistant's reply text (the last AIMessage the graph produced).
+    Message history is per thread; preferences are per `visitor_id`, so
+    they carry over into the visitor's later conversations."""
     config = {"configurable": {"thread_id": thread_id}}
     try:
         result = compiled_graph.invoke(
-            {"messages": [HumanMessage(content=message)], "thread_id": thread_id},
+            {
+                "messages": [HumanMessage(content=message)],
+                "thread_id": thread_id,
+                "visitor_id": visitor_id,
+            },
             config=config,
         )
     except Exception as e:
@@ -55,8 +58,8 @@ def get_conversation_history(thread_id: str) -> list[dict]:
 
 
 def clear_conversation(thread_id: str) -> bool:
-    """Delete `thread_id`'s saved preferences (Postgres row or JSON file,
-    whichever is active) and its message history in the checkpointer."""
-    db.delete_user_prefs(thread_id, PREFS_DIR)
+    """Delete `thread_id`'s message history in the checkpointer. The
+    visitor's preferences are deliberately kept: they belong to the
+    visitor, not to this one conversation."""
     compiled_graph.checkpointer.delete_thread(thread_id)
     return True

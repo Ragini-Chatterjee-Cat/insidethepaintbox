@@ -32,6 +32,22 @@ function getOrCreateThreadId() {
     return threadId;
 }
 
+/**
+ * Generate or retrieve a persistent visitor ID, used to remember this
+ * browser's preferences across conversations. Unlike the thread ID, the
+ * "new conversation" button never resets it. A browser that already has a
+ * thread ID reuses it as its visitor ID, because preferences saved before
+ * visitor IDs existed are stored under that thread ID.
+ */
+function getOrCreateVisitorId() {
+    let visitorId = localStorage.getItem('chatVisitorId');
+    if (!visitorId) {
+        visitorId = localStorage.getItem('chatThreadId') || crypto.randomUUID();
+        localStorage.setItem('chatVisitorId', visitorId);
+    }
+    return visitorId;
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     const chatButton = document.getElementById('chatButton');
     const chatBox = document.getElementById('chatBox');
@@ -41,6 +57,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Get persistent thread ID for conversation memory
     let threadId = getOrCreateThreadId();
+    const visitorId = getOrCreateVisitorId();
 
     // Replace the contact form with chat interface
     chatForm.innerHTML = `
@@ -49,7 +66,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 type="text"
                 id="userMessage"
                 class="chat-input"
-                placeholder="Ask for any queries..."
+                placeholder="Want to know more about the art..."
                 autocomplete="on"
             >
             <button type="button" id="sendBtn" class="chat-send-btn">
@@ -120,18 +137,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 },
                 body: JSON.stringify({
                     message: message,
-                    thread_id: threadId
+                    thread_id: threadId,
+                    visitor_id: visitorId
                 })
             });
 
             if (!response.ok) {
                 let errorMsg;
                 if (response.status === 400) {
-                    errorMsg = "Something went wrong with your message. Please try again.";
+                    errorMsg = "You said too much for my poor little haiku to process.";
                 } else if (response.status === 429) {
-                    errorMsg = "You're sending messages too quickly. Please wait a moment and try again.";
+                    errorMsg = "You're sending messages too quickly, chill out.";
                 } else if (response.status === 500) {
-                    errorMsg = "The server ran into an error. Please try again in a moment.";
+                    errorMsg = "Something is wrong with me, sadness.";
                 } else {
                     errorMsg = `Unexpected error (${response.status}). Please try again.`;
                 }

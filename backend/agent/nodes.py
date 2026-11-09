@@ -13,6 +13,7 @@ in the compiled graph; LangGraph calls them itself as the graph runs,
 nothing here is called directly by app.py or any other module.
 """
 import json
+import logging
 import os
 from pathlib import Path
 
@@ -83,10 +84,10 @@ class PaintboxAgent:
     # -----------------------------------------------------------------------
 
     def load_preferences(self, state: AgentState) -> dict:
-        """First node in the graph. Loads this thread's saved prefs (via
+        """First node in the graph. Loads this visitor's saved prefs (via
         db.py) into state so later nodes can personalize the reply."""
-        thread_id = state.get("thread_id", "")
-        prefs = db.load_user_prefs(thread_id, PREFS_DIR) if thread_id else {}
+        visitor_id = state.get("visitor_id", "")
+        prefs = db.load_user_prefs(visitor_id, PREFS_DIR) if visitor_id else {}
         return {"user_prefs": prefs}
 
     # -----------------------------------------------------------------------
@@ -202,9 +203,16 @@ class PaintboxAgent:
             HumanMessage(content=conversation_text),
         ])
 
+        # Haiku often wraps its JSON in a ```json ... ``` fence even when told
+        # not to - parsing the reply as-is then failed on every turn, so no
+        # preferences were saved after the switch to Claude. Parse only the
+        # outermost {...} instead, and log anything that still doesn't parse
+        # rather than failing silently again.
+        raw = result.content.strip()
         try:
-            extracted = json.loads(result.content.strip())
+            extracted = json.loads(raw[raw.find("{"):raw.rfind("}") + 1] or raw)
         except (json.JSONDecodeError, ValueError):
+            logging.warning("extract_preferences: unparseable extractor reply: %.200r", raw)
             return {}
 
         if not isinstance(extracted, dict):
@@ -246,10 +254,10 @@ class PaintboxAgent:
     def save_preferences(self, state: AgentState) -> dict:
         """Last node before END. Persists the (possibly updated) prefs
         dict via db.py so the next turn's load_preferences() sees it."""
-        thread_id = state.get("thread_id", "")
+        visitor_id = state.get("visitor_id", "")
         prefs = state.get("user_prefs", {})
-        if thread_id and prefs:
-            db.save_user_prefs(thread_id, prefs, PREFS_DIR)
+        if visitor_id and prefs:
+            db.save_user_prefs(visitor_id, prefs, PREFS_DIR)
         return {}
 
     # -----------------------------------------------------------------------

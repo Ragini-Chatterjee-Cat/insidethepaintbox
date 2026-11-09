@@ -18,6 +18,12 @@ from unittest.mock import MagicMock
 os.environ.setdefault("VOYAGE_API_KEY", "test-voyage-key")
 os.environ.setdefault("ANTHROPIC_API_KEY", "test-anthropic-key")
 
+# Never let tests reach a real database: app.py calls load_dotenv(), which
+# would otherwise pull POSTGRES_URI from a developer's backend/.env and point
+# graph.py's checkpointer at production. load_dotenv() never overrides a
+# variable that's already set, and empty means "not configured" everywhere.
+os.environ["POSTGRES_URI"] = ""
+
 # Stub chromadb: rag.py constructs a real PersistentClient() at import
 # time. Replace it with a fake so tests never touch disk or need the
 # real (heavy) chromadb package installed - individual tests that care

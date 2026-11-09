@@ -20,7 +20,7 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -31,13 +31,27 @@ load_dotenv()
 # Import our modules
 import db
 
-# clear_conversation only deletes the saved preferences file/row for a
-# thread; LangGraph's own checkpointed message history is untouched by it.
+# clear_conversation deletes a thread's message history; the visitor's
+# saved preferences are kept, since they outlive any one conversation.
 from agent import chat_with_memory, clear_conversation, get_conversation_history
 from document_loader import load_about_page, load_all_artworks
 from rag import get_collection_stats, index_documents
 
-limiter = Limiter(key_func=get_remote_address)
+
+def _client_ip(request: Request) -> str:
+    """The visitor's real IP, for per-visitor rate limits.
+
+    On Railway every request arrives via its edge proxy, so the socket
+    address (get_remote_address) is the proxy's - one IP shared by all
+    visitors. Railway's edge overwrites X-Forwarded-For (dropping any
+    copy the visitor sent) and puts the real client IP leftmost, so that
+    entry is trustworthy there. Locally there's no proxy and no header,
+    so this falls back to the socket address."""
+    forwarded = request.headers.get("x-forwarded-for", "")
+    return forwarded.split(",")[0].strip() or get_remote_address(request)
+
+
+limiter = Limiter(key_func=_client_ip)
 
 
 # --- startup indexing --------------------------------------------------
@@ -117,6 +131,11 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     thread_id: str  # Persistent thread ID for memory
+    # Browser-level id that outlives threads, used to key saved preferences.
+    # Optional so a visitor still running an older cached chat.js keeps
+    # working (falls back to thread_id). Restricted because it becomes a
+    # filename in db.py's JSON fallback - no "../" path tricks.
+    visitor_id: str = Field("", pattern=r"^[A-Za-z0-9-]{0,64}$")
 
 class ChatResponse(BaseModel):
     response: str
@@ -163,9 +182,18 @@ async def health_check():
 MAX_MESSAGE_LENGTH = 500   # chars — long prompts signal off-topic abuse
 MAX_USER_TURNS = 20  # max user messages per session
 
+# MAX_USER_TURNS is per thread_id, which the browser picks - the chat's
+# "new conversation" button (or any script) gets a fresh one at will. These
+# limits are keyed on things a visitor can't reset: their IP, and a single
+# site-wide bucket that caps the worst-case daily LLM spend. Counters live
+# in memory, so they reset whenever the app restarts or redeploys.
+PER_IP_LIMIT = "15/minute;100/day"
+GLOBAL_DAILY_LIMIT = "500/day"
+
 
 @app.post("/chat/v2", response_model=ChatResponse)
-@limiter.limit("15/minute")
+@limiter.limit(PER_IP_LIMIT)
+@limiter.limit(GLOBAL_DAILY_LIMIT, key_func=lambda: "all-visitors")
 async def chat(request: Request, body: ChatRequest):
     """Chat endpoint with persistent memory (LangGraph).
 
@@ -202,7 +230,9 @@ async def chat(request: Request, body: ChatRequest):
         # seconds on a transient error - run it off the event loop so one
         # slow/retrying request can't freeze every other visitor's request
         # (uvicorn runs this as a single process with no --workers).
-        response = await asyncio.to_thread(chat_with_memory, body.message, body.thread_id)
+        response = await asyncio.to_thread(
+            chat_with_memory, body.message, body.thread_id, body.visitor_id or body.thread_id
+        )
         return ChatResponse(response=response, thread_id=body.thread_id)
     except Exception as e:
         print(f"Error in chat endpoint: {e}")
@@ -228,7 +258,7 @@ async def get_history(thread_id: str):
 
 @app.delete("/chat/history/{thread_id}")
 async def delete_history(thread_id: str):
-    """Delete this thread's saved preferences (see agent.clear_conversation's
+    """Delete this thread's message history (see agent.clear_conversation's
     docstring for what this does and doesn't clear)."""
     try:
         success = clear_conversation(thread_id)
