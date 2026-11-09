@@ -81,13 +81,31 @@ def test_get_artwork_details_accepts_a_strong_reranked_guess(monkeypatch):
 def test_get_artwork_details_refuses_a_weak_guess(monkeypatch):
     """Regression test: asking for a piece that doesn't exist ("Beyonce")
     must not hand back the nearest unrelated portrait as if it were it."""
-    _patch_retrieval(monkeypatch, [("In Memory", 1.2)], [0.46], all_titles=["In Memory"])
+    _patch_retrieval(
+        monkeypatch, [("In Memory", 1.2), ("Harry Styles", 1.2)], [0.46, 0.44],
+        all_titles=["In Memory", "Harry Styles"],
+    )
 
     try:
         GetArtworkDetailsTool()._run("Beyonce")
         assert False, "expected a ToolException"
     except ToolException:
         pass
+
+
+def test_get_artwork_details_accepts_a_decent_guess_clearly_ahead(monkeypatch):
+    """Regression test (seen live): "the phoenix one" scored 0.54 - just
+    under the strong bar - so the bot said it couldn't find the piece. It
+    was well clear of the runner-up, which is what a real reference
+    looks like."""
+    _patch_retrieval(
+        monkeypatch, [("From the Ashes", 1.5), ("The Myth of Pandora", 1.6)], [0.54, 0.47],
+        all_titles=["From the Ashes", "The Myth of Pandora"],
+    )
+
+    result = GetArtworkDetailsTool()._run("the phoenix one")
+
+    assert result.startswith("Artwork: From the Ashes")
 
 
 def test_get_artwork_details_excludes_secret_pieces(monkeypatch):
