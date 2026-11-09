@@ -18,9 +18,7 @@ BASE_URL = "https://insidethepaintbox.netlify.app"
 CONFIDENCE_THRESHOLD = 1.5  # Chroma distance above this = "not a real match"
 
 # Filenames here must match frontend/pages/series/ exactly - Netlify's
-# static hosting is case-sensitive, and 6 of these 8 were previously wrong
-# (e.g. "thoughts.html" for a file actually named "Thoughts.html"), silently
-# handing visitors a 404 whenever the chatbot linked a series page.
+# static hosting is case-sensitive
 SERIES_URLS = {
     "Portraits":        f"{BASE_URL}/pages/series/Portraits.html",
     "Animal Portraits": f"{BASE_URL}/pages/series/portraits-animals.html",

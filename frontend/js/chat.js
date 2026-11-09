@@ -66,7 +66,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 type="text"
                 id="userMessage"
                 class="chat-input"
-                placeholder="Ask for any queries..."
+                placeholder="Want to know more about the art..."
                 autocomplete="on"
             >
             <button type="button" id="sendBtn" class="chat-send-btn">
@@ -145,11 +145,11 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!response.ok) {
                 let errorMsg;
                 if (response.status === 400) {
-                    errorMsg = "Something went wrong with your message. Please try again.";
+                    errorMsg = "You said too much for my poor little haiku to process.";
                 } else if (response.status === 429) {
-                    errorMsg = "You're sending messages too quickly. Please wait a moment and try again.";
+                    errorMsg = "You're sending messages too quickly, chill out.";
                 } else if (response.status === 500) {
-                    errorMsg = "The server ran into an error. Please try again in a moment.";
+                    errorMsg = "Something is wrong with me, sadness.";
                 } else {
                     errorMsg = `Unexpected error (${response.status}). Please try again.`;
                 }
