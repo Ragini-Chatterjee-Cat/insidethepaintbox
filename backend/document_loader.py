@@ -56,6 +56,7 @@ SERIES_ARTWORK_MAP = {
         "Voices.html",
         "Flowers.html",
         "behind-the-tiger.html",
+        "thoughts-trapped.html",  # its page lives in pages/series/, but it's one piece
     ],
     "Camera Series": [
         "camera-series.html",

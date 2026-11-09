@@ -2,8 +2,8 @@
 GetArtworkDetailsTool — full details about a specific artwork by title.
 
 Purpose: answers "tell me about <artwork name>" with the full indexed
-content for that one piece, re-ranked by title match rather than trusting
-raw embedding distance alone.
+content for that one piece - resolved by exact title, then a unique
+partial title, then the reranker's best guess (tools/base.resolve_artwork).
 
 Called by: nothing in this codebase calls it directly. It's registered in
 tools/__init__.py's ARTWORK_TOOLS list, bound to the LLM in
@@ -14,7 +14,7 @@ visitor named one specific artwork by title.
 from langchain_core.tools import BaseTool, ToolException
 from pydantic import BaseModel, Field
 
-from .base import CONFIDENCE_THRESHOLD, collection, embed_query
+from .base import resolve_artwork
 
 
 class GetArtworkDetailsInput(BaseModel):
@@ -32,48 +32,17 @@ class GetArtworkDetailsTool(BaseTool):
     handle_tool_error: bool = True
 
     def _run(self, artwork_name: str) -> str:
-        """Embed `artwork_name`, take the top-3 nearest documents, then
-        prefer whichever one's title actually contains (or is contained
-        by) the requested name over the raw #1 embedding match."""
-        query_embedding = embed_query(artwork_name)
-        results = collection.query(
-            query_embeddings=[query_embedding],
-            n_results=3,
-            where={"secret": False},
-            include=["documents", "metadatas", "distances"],
-        )
-
-        if not results["documents"] or not results["documents"][0]:
+        """Resolve `artwork_name` to one artwork (exact title, partial
+        title, then reranked best guess) and return its full details."""
+        match = resolve_artwork(artwork_name)
+        if match is None:
             raise ToolException(f"Could not find any artwork named '{artwork_name}'.")
 
-        best_idx = None
-        name_lower = artwork_name.lower()
-        for i, meta in enumerate(results["metadatas"][0]):
-            title = meta.get("title", "").lower()
-            if name_lower in title or title in name_lower:
-                best_idx = i
-                break
-
-        if best_idx is None:
-            # No title actually matched the requested name - only trust the
-            # top embedding result if it's a confident match. Otherwise this
-            # would silently hand back an unrelated artwork's full details
-            # for a name that doesn't exist, contradicting GALLERY_SYSTEM's
-            # rule to admit when nothing was found.
-            if results["distances"][0][0] > CONFIDENCE_THRESHOLD:
-                raise ToolException(f"Could not find any artwork named '{artwork_name}'.")
-            best_idx = 0
-
-        meta = results["metadatas"][0][best_idx]
-        content = results["documents"][0][best_idx]
-        title = meta.get("title", "Unknown")
-        series = meta.get("series", "")
-        url = meta.get("url", "")
-
-        output = f"Artwork: {title}\n"
-        if series:
-            output += f"Series: {series}\n"
-        if url:
-            output += f"URL: {url}\n"
-        output += f"\n{content}"
+        meta = match["meta"]
+        output = f"Artwork: {meta.get('title', 'Unknown')}\n"
+        if meta.get("series"):
+            output += f"Series: {meta['series']}\n"
+        if meta.get("url"):
+            output += f"URL: {meta['url']}\n"
+        output += f"\n{match['content']}"
         return output

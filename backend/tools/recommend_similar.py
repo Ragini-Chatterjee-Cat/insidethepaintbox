@@ -2,8 +2,8 @@
 RecommendSimilarTool — find artworks similar to a given one.
 
 Purpose: answers "I liked X, show me more like it" by looking up X, then
-using X's own indexed content as a fresh search query against the rest
-of the (non-secret) collection.
+finding the (non-secret) artworks whose stored text+image embeddings are
+nearest to X's own - so "similar" includes how the pieces look.
 
 Called by: nothing in this codebase calls it directly. It's registered in
 tools/__init__.py's ARTWORK_TOOLS list, bound to the LLM in
@@ -14,7 +14,7 @@ visitor wants more of something they already liked.
 from langchain_core.tools import BaseTool, ToolException
 from pydantic import BaseModel, Field
 
-from .base import collection, embed_query
+from .base import collection, is_overview_page, resolve_artwork
 
 
 class RecommendSimilarInput(BaseModel):
@@ -31,45 +31,33 @@ class RecommendSimilarTool(BaseTool):
     handle_tool_error: bool = True
 
     def _run(self, artwork_name: str) -> str:
-        """Look up `artwork_name` (1 nearest match), then use its own
-        content as a second query to find up to 4 other, non-secret
-        artworks similar to it, excluding itself from the results."""
-        source_embedding = embed_query(artwork_name)
-        source_results = collection.query(
-            query_embeddings=[source_embedding],
-            n_results=1,
-            where={"secret": False},
-            include=["documents", "metadatas"],
-        )
-
-        if not source_results["documents"] or not source_results["documents"][0]:
+        """Resolve `artwork_name` to an artwork, then find up to 4 others
+        whose stored embeddings are nearest to its own. Those embeddings
+        were made from each piece's text AND images, so "similar" covers
+        how the pieces look, not just how they're described."""
+        source = resolve_artwork(artwork_name)
+        if source is None:
             raise ToolException(f"Could not find artwork named '{artwork_name}' to base recommendations on.")
+        source_title = source["meta"].get("title", artwork_name)
 
-        source_content = source_results["documents"][0][0]
-        source_meta = source_results["metadatas"][0][0]
-        source_title = source_meta.get("title", artwork_name)
-
-        content_embedding = embed_query(source_content)
+        source_embedding = collection.get(ids=[source["id"]], include=["embeddings"])["embeddings"][0]
         similar = collection.query(
-            query_embeddings=[content_embedding],
-            n_results=6,
+            query_embeddings=[source_embedding],
+            n_results=10,
             where={"secret": False},
-            include=["metadatas", "distances"],
+            include=["metadatas"],
         )
 
         lines = [f"Artworks similar to '{source_title}':\n"]
         count = 0
-        for meta in similar["metadatas"][0]:
-            title = meta.get("title", "Unknown")
-            if title.lower() == source_title.lower():
+        for doc_id, meta in zip(similar["ids"][0], similar["metadatas"][0]):
+            if doc_id == source["id"] or is_overview_page(meta):
                 continue
-            series = meta.get("series", "")
-            url = meta.get("url", "")
-            line = f"- {title}"
-            if series:
-                line += f" (Series: {series})"
-            if url:
-                line += f"\n  {url}"
+            line = f"- {meta.get('title', 'Unknown')}"
+            if meta.get("series"):
+                line += f" (Series: {meta['series']})"
+            if meta.get("url"):
+                line += f"\n  {meta['url']}"
             lines.append(line)
             count += 1
             if count >= 4:
@@ -77,5 +65,4 @@ class RecommendSimilarTool(BaseTool):
 
         if count == 0:
             raise ToolException(f"No similar artworks found for '{artwork_name}'.")
-
         return "\n".join(lines)
