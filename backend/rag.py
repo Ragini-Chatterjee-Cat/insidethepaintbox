@@ -40,6 +40,7 @@ from voyageai.error import (
 logger = logging.getLogger(__name__)
 
 EMBEDDING_MODEL_NAME = os.environ.get("EMBEDDING_MODEL", "voyage-multimodal-3")
+RERANK_MODEL_NAME = "rerank-2.5"
 CHROMA_DB_PATH = os.environ.get("CHROMA_DB_PATH", "./chroma_db")
 
 _voyage_api_key = os.environ.get("VOYAGE_API_KEY")
@@ -65,16 +66,14 @@ _RETRYABLE_VOYAGE_ERRORS = (
 
 # --- embedding -----------------------------------------------------------
 
-def _voyage_embed(inputs: list, input_type: str, max_attempts: int = 4) -> list:
-    """Call Voyage's multimodal_embed with exponential backoff + jitter on
-    transient errors (max_attempts total tries: 1s, 2s, 4s, ... between
-    them, each wait capped at 60s). Non-retryable errors (auth, bad
-    request) raise immediately."""
+def _with_voyage_retries(call, max_attempts: int = 4):
+    """Run call() with exponential backoff + jitter on transient Voyage
+    errors (max_attempts total tries: 1s, 2s, 4s, ... between them, each
+    wait capped at 60s). Non-retryable errors (auth, bad request) raise
+    immediately."""
     for attempt in range(1, max_attempts + 1):
         try:
-            return _voyage_client.multimodal_embed(
-                inputs, model=EMBEDDING_MODEL_NAME, input_type=input_type
-            )
+            return call()
         except _RETRYABLE_VOYAGE_ERRORS:
             if attempt == max_attempts:
                 raise
@@ -84,6 +83,16 @@ def _voyage_embed(inputs: list, input_type: str, max_attempts: int = 4) -> list:
                 attempt, max_attempts, delay,
             )
             time.sleep(delay)
+
+
+def _voyage_embed(inputs: list, input_type: str, max_attempts: int = 4) -> list:
+    """Call Voyage's multimodal_embed, retrying transient errors."""
+    return _with_voyage_retries(
+        lambda: _voyage_client.multimodal_embed(
+            inputs, model=EMBEDDING_MODEL_NAME, input_type=input_type
+        ),
+        max_attempts,
+    )
 
 
 def embed_document(text: str, image_paths: list[str] | None = None) -> list[float]:
@@ -116,6 +125,23 @@ def embed_query(text: str) -> list[float]:
     """Embed a search query (text only)."""
     result = _voyage_embed([[text]], input_type="query")
     return result.embeddings[0]
+
+
+# --- reranking -------------------------------------------------------------
+
+def rerank(query: str, documents: list[str]) -> list[float]:
+    """Score how relevant each document is to `query` (0-1), in the same
+    order as `documents`. Vector distance only says "nearby"; a reranker
+    reads the query and each document together, so its scores are far
+    better calibrated - e.g. it ranks "Lucky Panda" first for "bubble
+    tea", which the vector search put 6th."""
+    result = _with_voyage_retries(
+        lambda: _voyage_client.rerank(query, documents, model=RERANK_MODEL_NAME)
+    )
+    scores = [0.0] * len(documents)
+    for r in result.results:
+        scores[r.index] = r.relevance_score
+    return scores
 
 
 # --- Chroma collection + content-change detection -------------------------

@@ -142,9 +142,12 @@ shoved into it.
 3. **`react_node`** (the artwork path) gives Haiku up to 5 tool-calling
    iterations against the six tools in `tools/`. Not all of them do
    vector search - `filter_by_series` is a plain metadata filter,
-   `get_artwork_details` re-ranks embedding results by literal title
-   match, and `reveal_secret_artwork` only ever runs if the visitor
-   explicitly asked about something hidden.
+   `get_artwork_details` tries exact and partial title matches first,
+   and `reveal_secret_artwork` only ever runs if the visitor explicitly
+   asked about something hidden. Searches take the 20 nearest vectors
+   and rerank them with Voyage's `rerank-2.5`, which reads the question
+   and each description together; results scoring 0.3-0.55 are passed to
+   the model labelled `[weak match]` (see `tools/base.py`).
 
 4. **Generation** happens inline - whatever a tool returned gets appended
    to the message history, and Haiku writes the final reply directly.

@@ -2,8 +2,9 @@
 SearchArtworksTool — semantic search over the artwork collection.
 
 Purpose: lets the agent browse by mood/theme/style ("something dark and
-emotional") rather than by exact title, using the same multimodal
-embedding the collection was indexed with.
+emotional") rather than by exact title: vector search over the same
+multimodal embedding the collection was indexed with, then a reranker
+(tools/base.find_relevant) to order and filter the candidates.
 
 Called by: nothing in this codebase calls it directly. It's registered in
 tools/__init__.py's ARTWORK_TOOLS list, bound to the LLM in
@@ -15,7 +16,7 @@ for a general/thematic search rather than a named lookup.
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
 
-from .base import CONFIDENCE_THRESHOLD, collection, embed_query
+from .base import RERANK_STRONG_SCORE, description_of, find_relevant
 
 
 class SearchArtworksInput(BaseModel):
@@ -35,45 +36,33 @@ class SearchArtworksTool(BaseTool):
     handle_tool_error: bool = True
 
     def _run(self, query: str) -> str:
-        """Embed `query`, return up to 5 confidently-matching (non-secret)
-        artworks as a formatted text block, or a fallback message if
-        nothing clears CONFIDENCE_THRESHOLD."""
-        query_embedding = embed_query(query)
-        results = collection.query(
-            query_embeddings=[query_embedding],
-            n_results=5,
-            where={"secret": False},
-            include=["documents", "metadatas", "distances"],
-        )
-
-        if not results["documents"] or not results["documents"][0]:
-            return "No artworks found matching that description."
-
-        output_lines = []
-        for i in range(len(results["documents"][0])):
-            distance = results["distances"][0][i]
-            if distance > CONFIDENCE_THRESHOLD:
-                continue
-            meta = results["metadatas"][0][i]
-            content = results["documents"][0][i]
-            title = meta.get("title", "Unknown")
-            series = meta.get("series", "")
-            url = meta.get("url", "")
-            entry = f"- {title}"
-            if series:
-                entry += f" (Series: {series})"
-            if url:
-                entry += f"\n  URL: {url}"
-            snippet = content[:200].replace("\n", " ").strip()
-            if snippet:
-                entry += f"\n  About: {snippet}" + ("..." if len(content) > 200 else "")
-            output_lines.append(entry)
-
-        if not output_lines:
+        """Return up to 5 artworks relevant to `query` (vector search, then
+        reranked), each labelled as a strong or weak match, or a fallback
+        message if nothing is relevant."""
+        matches = find_relevant(query)[:5]
+        if not matches:
             return (
-                "No artworks closely matched that description. "
+                "No artworks matched that description. "
                 "The collection includes: Portraits, Animal Portraits, Mythical, "
                 "Thoughts, Camera Series, Diary Entries, Fanart, and Cards."
             )
+
+        output_lines = []
+        for match in matches:
+            meta = match["meta"]
+            entry = f"- {meta.get('title', 'Unknown')}"
+            if meta.get("series"):
+                entry += f" (Series: {meta['series']})"
+            # Weak = the closest thing in the collection, not a real match
+            # (e.g. other celebrity portraits for "Taylor Swift"), so the
+            # model can say so instead of presenting it as what was asked.
+            if match["score"] is not None and match["score"] < RERANK_STRONG_SCORE:
+                entry += " [weak match]"
+            if meta.get("url"):
+                entry += f"\n  URL: {meta['url']}"
+            description = description_of(match["content"])
+            if description:
+                entry += f"\n  About: {description[:300]}" + ("..." if len(description) > 300 else "")
+            output_lines.append(entry)
 
         return "Found these artworks:\n\n" + "\n\n".join(output_lines)
