@@ -164,7 +164,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
             // Remove typing indicator and show response
             typingIndicator.remove();
-            addMessage(data.response, 'bot');
+            const botMessage = addMessage(data.response, 'bot');
+            addArtworkThumbnails(botMessage, data.response);
 
         } catch (error) {
             console.error('Chat error:', error);
@@ -235,6 +236,51 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     /**
+     * Show a thumbnail of each artwork a bot reply links to (up to 3). The
+     * reply only carries the artwork page's URL, so fetch that page from
+     * this same site and use its painting (img#cub) - thumbnails then stay
+     * in sync with the pages without any extra data. Netlify's image CDN
+     * resizes it: a 6 MB original arrives as a ~40 KB thumbnail.
+     */
+    async function addArtworkThumbnails(messageDiv, text) {
+        const pageUrls = text.match(/https?:\/\/[^\s<]+\/artworks\/[^\s<]+?\.html/g) || [];
+        if (!pageUrls.length) return;
+        const row = document.createElement('div');
+        row.className = 'chat-thumbs';
+        messageDiv.appendChild(row);
+        for (const pageUrl of [...new Set(pageUrls)].slice(0, 3)) {
+            try {
+                // Fetch by path, so this also works on deploy previews and locally
+                const pagePath = new URL(pageUrl).pathname;
+                const html = await (await fetch(pagePath)).text();
+                const page = new DOMParser().parseFromString(html, 'text/html');
+                const painting = page.querySelector('img#cub') || page.querySelector('img');
+                if (!painting) continue;
+
+                const imagePath = decodeURIComponent(
+                    new URL(painting.getAttribute('src'), new URL(pagePath, location.origin)).pathname
+                );
+                const link = document.createElement('a');
+                link.href = pageUrl;
+                link.target = '_blank';
+                link.className = 'chat-thumb';
+                const img = document.createElement('img');
+                img.alt = painting.alt || '';
+                img.loading = 'lazy';
+                img.src = `/.netlify/images?url=${encodeURIComponent(imagePath)}&w=480`;
+                // No image CDN (e.g. a local preview server): use the original
+                img.onerror = () => { img.onerror = null; img.src = imagePath; };
+                img.onload = () => { chatBody.scrollTop = chatBody.scrollHeight; };
+                link.appendChild(img);
+                row.appendChild(link);
+            } catch (error) {
+                // A thumbnail is decoration - never let it break the reply
+                console.error('Could not load artwork thumbnail:', error);
+            }
+        }
+    }
+
+    /**
      * Add typing indicator
      */
     function addTypingIndicator() {
@@ -256,6 +302,33 @@ document.addEventListener('DOMContentLoaded', function() {
     function addChatStyles() {
         const styles = document.createElement('style');
         styles.textContent = `
+            /* Artwork thumbnails under bot replies: one row, up to 3 */
+            .chat-thumbs {
+                display: flex;
+                gap: 8px;
+                margin-top: 10px;
+            }
+            .chat-thumbs:empty {
+                display: none;
+            }
+            .chat-thumb {
+                flex: 1 1 0;
+                min-width: 0;
+                max-width: 200px;
+            }
+            .chat-thumb img {
+                display: block;
+                /* undo Page.css's site-wide img margin/padding/opacity */
+                margin: 0;
+                padding: 0;
+                opacity: 1;
+                width: 100%;
+                height: 110px;
+                object-fit: cover;
+                border-radius: 10px;
+                box-shadow: 0 2px 8px rgba(92, 64, 51, 0.2);
+            }
+
             /* User messages */
             .chat-message.user {
                 background: rgba(92, 64, 51, 0.15);
