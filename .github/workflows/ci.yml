@@ -25,6 +25,9 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           version: "0.12.17"
+          # Match the Dockerfile (python:3.11-slim). Unpinned, CI used the
+          # runner's Python (3.14), which pillow 10.4.0 has no wheels for.
+          python-version: "3.11"
       - name: Install dependencies
         working-directory: backend
         run: uv sync --locked --all-groups
@@ -39,6 +42,9 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           version: "0.12.17"
+          # Match the Dockerfile (python:3.11-slim). Unpinned, CI used the
+          # runner's Python (3.14), which pillow 10.4.0 has no wheels for.
+          python-version: "3.11"
       - name: Install dependencies
         working-directory: backend
         run: uv sync --locked --all-groups
