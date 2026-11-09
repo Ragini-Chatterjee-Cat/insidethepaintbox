@@ -10,7 +10,7 @@ def client(monkeypatch):
     """A client for the real app with the LLM side stubbed out. Not used
     as a context manager, so startup indexing (lifespan) never runs."""
     monkeypatch.setattr(app_module, "get_conversation_history", lambda _thread_id: [])
-    monkeypatch.setattr(app_module, "chat_with_memory", lambda _message, _thread_id: "hi!")
+    monkeypatch.setattr(app_module, "chat_with_memory", lambda _message, _thread_id, _visitor_id: "hi!")
     app_module.limiter.reset()
     yield TestClient(app_module.app)
     app_module.limiter.reset()
@@ -49,3 +49,35 @@ def test_global_daily_cap_applies_across_all_visitors(client):
     for i in range(500):
         assert _chat(client, f"10.0.{i // 250}.{i % 250}").status_code == 200
     assert _chat(client, "9.9.9.9").status_code == 429
+
+
+def test_chat_passes_visitor_id_through_for_preferences(client, monkeypatch):
+    calls = []
+    monkeypatch.setattr(app_module, "chat_with_memory", lambda *args: calls.append(args) or "hi!")
+
+    response = client.post(
+        "/chat/v2", json={"message": "hello", "thread_id": "thread-2", "visitor_id": "visitor-1"}
+    )
+
+    assert response.status_code == 200
+    assert calls == [("hello", "thread-2", "visitor-1")]
+
+
+def test_chat_falls_back_to_thread_id_without_visitor_id(client, monkeypatch):
+    """A visitor still running an older cached chat.js sends no visitor_id;
+    their preferences stay keyed by thread_id, as before."""
+    calls = []
+    monkeypatch.setattr(app_module, "chat_with_memory", lambda *args: calls.append(args) or "hi!")
+
+    client.post("/chat/v2", json={"message": "hello", "thread_id": "thread-2"})
+
+    assert calls == [("hello", "thread-2", "thread-2")]
+
+
+def test_chat_rejects_visitor_ids_that_could_escape_the_prefs_dir(client):
+    """visitor_id becomes a filename in db.py's JSON fallback."""
+    for bad in ("../../app", "a/b", "x" * 65):
+        response = client.post(
+            "/chat/v2", json={"message": "hello", "thread_id": "t1", "visitor_id": bad}
+        )
+        assert response.status_code == 422

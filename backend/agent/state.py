@@ -20,4 +20,5 @@ class AgentState(TypedDict):
     messages: Annotated[list, add_messages]  # full message history, LangGraph appends automatically
     intent: str           # "artwork" | "general" | "commission" — set by the classify node
     user_prefs: dict      # liked series, artworks, tone — loaded/saved by db.py
-    thread_id: str        # the conversation's persistent id, used for memory + prefs lookup
+    thread_id: str        # the conversation's persistent id, used for message history
+    visitor_id: str       # the browser's persistent id, used for prefs lookup (outlives threads)

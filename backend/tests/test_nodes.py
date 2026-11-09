@@ -195,3 +195,17 @@ def test_route_intent_maps_each_intent_to_its_node():
     assert agent.route_intent({"intent": "artwork"}) == "react_node"
     assert agent.route_intent({"intent": "general"}) == "general_chat"
     assert agent.route_intent({}) == "general_chat"  # missing intent defaults safely
+
+
+def test_preferences_follow_the_visitor_across_conversations(monkeypatch, tmp_path):
+    """Prefs are keyed by visitor_id, not thread_id - so starting a new
+    conversation (a new thread) still loads what was learned earlier."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setattr("agent.nodes.PREFS_DIR", tmp_path)
+    agent = PaintboxAgent()
+    prefs = {"liked_series": ["Mythical"], "mentioned_artworks": [], "tone": "curious"}
+
+    agent.save_preferences({"thread_id": "thread-1", "visitor_id": "visitor-1", "user_prefs": prefs})
+    loaded = agent.load_preferences({"thread_id": "thread-2", "visitor_id": "visitor-1"})
+
+    assert loaded == {"user_prefs": prefs}

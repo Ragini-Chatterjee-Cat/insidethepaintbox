@@ -32,6 +32,22 @@ function getOrCreateThreadId() {
     return threadId;
 }
 
+/**
+ * Generate or retrieve a persistent visitor ID, used to remember this
+ * browser's preferences across conversations. Unlike the thread ID, the
+ * "new conversation" button never resets it. A browser that already has a
+ * thread ID reuses it as its visitor ID, because preferences saved before
+ * visitor IDs existed are stored under that thread ID.
+ */
+function getOrCreateVisitorId() {
+    let visitorId = localStorage.getItem('chatVisitorId');
+    if (!visitorId) {
+        visitorId = localStorage.getItem('chatThreadId') || crypto.randomUUID();
+        localStorage.setItem('chatVisitorId', visitorId);
+    }
+    return visitorId;
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     const chatButton = document.getElementById('chatButton');
     const chatBox = document.getElementById('chatBox');
@@ -41,6 +57,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Get persistent thread ID for conversation memory
     let threadId = getOrCreateThreadId();
+    const visitorId = getOrCreateVisitorId();
 
     // Replace the contact form with chat interface
     chatForm.innerHTML = `
@@ -120,7 +137,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 },
                 body: JSON.stringify({
                     message: message,
-                    thread_id: threadId
+                    thread_id: threadId,
+                    visitor_id: visitorId
                 })
             });
 

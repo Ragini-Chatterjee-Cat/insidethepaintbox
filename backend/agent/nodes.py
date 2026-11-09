@@ -84,10 +84,10 @@ class PaintboxAgent:
     # -----------------------------------------------------------------------
 
     def load_preferences(self, state: AgentState) -> dict:
-        """First node in the graph. Loads this thread's saved prefs (via
+        """First node in the graph. Loads this visitor's saved prefs (via
         db.py) into state so later nodes can personalize the reply."""
-        thread_id = state.get("thread_id", "")
-        prefs = db.load_user_prefs(thread_id, PREFS_DIR) if thread_id else {}
+        visitor_id = state.get("visitor_id", "")
+        prefs = db.load_user_prefs(visitor_id, PREFS_DIR) if visitor_id else {}
         return {"user_prefs": prefs}
 
     # -----------------------------------------------------------------------
@@ -254,10 +254,10 @@ class PaintboxAgent:
     def save_preferences(self, state: AgentState) -> dict:
         """Last node before END. Persists the (possibly updated) prefs
         dict via db.py so the next turn's load_preferences() sees it."""
-        thread_id = state.get("thread_id", "")
+        visitor_id = state.get("visitor_id", "")
         prefs = state.get("user_prefs", {})
-        if thread_id and prefs:
-            db.save_user_prefs(thread_id, prefs, PREFS_DIR)
+        if visitor_id and prefs:
+            db.save_user_prefs(visitor_id, prefs, PREFS_DIR)
         return {}
 
     # -----------------------------------------------------------------------
