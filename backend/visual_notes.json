@@ -1,0 +1,175 @@
+{
+  "_readme": "Notes for the chatbot only - never shown on the website (Netlify only publishes frontend/). Keyed by each artwork page's filename. 'colours' and 'shows' describe what the painting looks like, so visitors can search by colour or subject; 'about' adds facts about public subjects. Edit freely: any change here is picked up on the next deploy, which re-indexes automatically.",
+
+  "normal-people.html": {
+    "colours": "warm orange and rust, deep green, skin tones, on cream paper covered in handwriting",
+    "shows": "a young man in an orange jumper hugging a young woman with a dark fringe and a green top",
+    "about": "Normal People is a 2020 TV series based on Sally Rooney's novel"
+  },
+  "only-murders.html": {
+    "colours": "golden blonde hair, black jacket with gold and red pattern, warm skin tones on beige paper",
+    "shows": "a blonde woman looking upwards, wearing an ornate black patterned jacket",
+    "about": "Only Murders in the Building is a mystery-comedy TV series starring Steve Martin, Martin Short and Selena Gomez"
+  },
+  "anora.html": {
+    "colours": "black and white - pencil and charcoal on cream paper",
+    "shows": "a pencil portrait of a young woman with long dark hair, surrounded by handwritten notes about watching the Oscar-nominated films",
+    "about": "Anora is a 2024 film by Sean Baker that won the Academy Award (Oscar) for Best Picture"
+  },
+  "fellow-travellers.html": {
+    "colours": "grey graphite pencil on cream paper",
+    "shows": "a pencil portrait of a dark-haired man, photographed in someone's hand next to a plate of red grapes",
+    "about": "Fellow Travelers is a 2023 TV series about two men in a secret relationship in 1950s Washington"
+  },
+  "rawr.html": {
+    "colours": "brown and grey tabby fur, muted blue, warm skin tones, dark green background",
+    "shows": "a tabby cat hissing with its mouth open while being held in someone's arms"
+  },
+  "tiger-cub.html": {
+    "colours": "white, grey and black fur with magenta, pink and purple flowers; framed in black",
+    "shows": "a pale spotted big-cat cub lying down among bright purple and pink flowers"
+  },
+  "hippo.html": {
+    "colours": "teal, turquoise and deep green swirling water; grey and peachy-pink hippo",
+    "shows": "a hippo's head rising out of swirling blue-green water"
+  },
+  "lucky-panda.html": {
+    "colours": "brown and black fur, rich greens of leaves and trees",
+    "shows": "a fluffy brown and black panda cub clinging to a tree trunk among green foliage"
+  },
+  "just-chilling.html": {
+    "colours": "ginger orange and white cat, deep navy blue and slate grey shadows, colour swatches in navy, blue and ochre",
+    "shows": "an orange and white cat lounging on a dark blue blanket, in watercolour"
+  },
+  "an-imp-puppy.html": {
+    "colours": "white, tan and black dog on a deep green background with white handwriting",
+    "shows": "a small white dog with tan and black markings on its face, looking to the side"
+  },
+  "happy-birthday.html": {
+    "colours": "cream card, orange-brown cartoon cat, black lettering and a dark laurel wreath",
+    "shows": "a birthday card with a big-eyed cartoon cat and the words 'Happy Birthday - you are old now'"
+  },
+  "congratulations.html": {
+    "colours": "black card with white lettering, grey-green kitten",
+    "shows": "a black card with a wide-eyed kitten and the words 'You made it! Congratulations'"
+  },
+  "in-memory.html": {
+    "colours": "soft watercolour skin tones, pale pink shirt, white background",
+    "shows": "a smiling older man with glasses in a pink collared shirt"
+  },
+  "harry-styles.html": {
+    "colours": "bright pink tutu, pale grey-blue background, black tattoos",
+    "shows": "Harry Styles sitting in a pink ballet tutu and corset, tattoos on his arms and chest, a cigarette in his mouth",
+    "about": "Harry Styles is an English singer, formerly of One Direction"
+  },
+  "aishwarya-rai.html": {
+    "colours": "black hair, pale green eyes, red lips, sepia background with white handwriting and grey roses",
+    "shows": "a close-up portrait of a woman with a black bob, green eyes and red lipstick",
+    "about": "Aishwarya Rai is an Indian actress and a former Miss World"
+  },
+  "krishna.html": {
+    "colours": "bright green background, black curly hair, warm skin tones, white top",
+    "shows": "a person with dark curly hair and an earring, looking to the side"
+  },
+  "sydney-sweeney.html": {
+    "colours": "blonde hair, blue eyes, pink and red roses on brown paper with white handwriting",
+    "shows": "a portrait of a woman with long blonde braided hair framed by painted roses",
+    "about": "Sydney Sweeney is an American actress known for Euphoria"
+  },
+  "byun.html": {
+    "colours": "purple, lavender and grey with black and white; mounted on a purple background",
+    "shows": "a young man with tousled light hair looking upwards, with smoky swirls around him",
+    "about": "Byun Baek-hyun (Baekhyun) is a South Korean singer and a member of the K-pop group EXO"
+  },
+  "peeping-through-the-ivy.html": {
+    "colours": "deep greens of ivy, warm brown skin, silver jewellery, soft grey",
+    "shows": "a smiling woman in a silver headpiece and earrings of a classical dancer, peeking through dense green ivy"
+  },
+  "nailea-devora.html": {
+    "colours": "black hair, red lips, rust-brown top, plain pale background",
+    "shows": "a young woman with two long black braids and a red lip, signed 'Nailea Devora' underneath"
+  },
+  "neymar.html": {
+    "colours": "warm orange and golden skin tones, dark blue shirt, on brown paper with handwriting",
+    "shows": "Neymar in profile with a beard and neck tattoos",
+    "about": "Neymar is a Brazilian footballer"
+  },
+  "chocolate.html": {
+    "colours": "blue, red and pink chocolate wrappers on silver foil, on brown diary paper",
+    "shows": "a stack of Paul and Mike chocolate bars on crumpled foil, painted in a diary"
+  },
+  "strawberries.html": {
+    "colours": "bright red strawberries, green stalks, black bowl, brown paper with white handwriting",
+    "shows": "a bowl full of red strawberries seen from above, painted in a diary"
+  },
+  "coffee.html": {
+    "colours": "warm browns and cream, soft blue-grey shadow",
+    "shows": "a cappuccino with latte art seen from above, painted in a diary"
+  },
+  "pawprints.html": {
+    "colours": "ginger orange cat on brown kraft paper with white handwriting",
+    "shows": "a ginger cat peeking over a diary page next to a pen"
+  },
+  "dreaming.html": {
+    "colours": "warm skin tones, white shirt, brown kraft paper, a cup of coffee beside it",
+    "shows": "a dreamy young man resting his head on his arm, painted on a diary page full of handwriting"
+  },
+  "icarus.html": {
+    "colours": "black, white and grey with touches of blue and green - mostly monochrome",
+    "shows": "a tall narrow canvas of a muscular winged figure reaching upwards, feathers scattering"
+  },
+  "head-in-the-clouds.html": {
+    "colours": "pale blue-grey sky, white and peach clouds, black birds",
+    "shows": "two dark birds flying among soft clouds",
+    "about": "based on the Greek myth of Tereus, Procne and Philomela, who were turned into birds"
+  },
+  "draconic.html": {
+    "colours": "dark and moody - black, charcoal, bronze and silvery white",
+    "shows": "a dragon spread across four separate panels: textured scales, wings and a white mane",
+    "about": "a dragon, a mythical creature"
+  },
+  "from-the-ashes.html": {
+    "colours": "rust brown, burnt orange and black with dark green feathers",
+    "shows": "a phoenix with huge outspread wings rising up, in a circle of red",
+    "about": "the phoenix, the mythical bird reborn from its own ashes"
+  },
+  "myth.html": {
+    "colours": "grey and white storm clouds, with pink, blue and gold flying creatures",
+    "shows": "a woman reclining among dramatic clouds as winged creatures burst out around her",
+    "about": "the Greek myth of Pandora, who opened a box that released all the evils into the world"
+  },
+  "athena.html": {
+    "colours": "white and cream robes, sandy stone wall, warm earthy tones",
+    "shows": "a statue-like woman in flowing robes holding a book and a shield, against a stone wall",
+    "about": "inspired by Athena, the Greek goddess of wisdom and war"
+  },
+  "voices.html": {
+    "colours": "rust brown, burnt orange and black ink around a pale cracked face",
+    "shows": "a face split in two like a cracked brain, one half screaming",
+    "about": "mixed media on paper"
+  },
+  "whine.html": {
+    "colours": "deep wine red and burgundy splashes on cream paper with handwriting",
+    "shows": "a glass of red wine with wine splattered around it and a tiny figure inside the glass"
+  },
+  "behind-the-tiger.html": {
+    "colours": "black, white and grey with icy blue and purple",
+    "shows": "a fierce tiger bursting through shattered glass, with a small kitten sitting beneath it"
+  },
+  "flowers.html": {
+    "colours": "black and white",
+    "shows": "three small black-framed pen drawings of flowers arranged on white fabric with a pocket watch"
+  },
+  "hurt.html": {
+    "colours": "magenta, purple and pink watercolour on white",
+    "shows": "a woman screaming, with arrows flying out of her mouth and one arrow in her back"
+  },
+  "camera-series.html": {
+    "colours": "black, white and grey",
+    "shows": "a black Samsung compact camera, framed by the words 'Samsung Zoom Lens'"
+  },
+  "thoughts-trapped.html": {
+    "colours": "rust red, brown and orange city buildings with a glassy dome",
+    "shows": "a woman standing inside a glass sphere surrounded by tall red buildings"
+  }
+}

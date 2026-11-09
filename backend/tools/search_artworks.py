@@ -16,7 +16,7 @@ for a general/thematic search rather than a named lookup.
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
 
-from .base import RERANK_STRONG_SCORE, description_of, find_relevant
+from .base import RERANK_STRONG_SCORE, description_of, find_relevant, visual_notes_of
 
 
 class SearchArtworksInput(BaseModel):
@@ -63,6 +63,9 @@ class SearchArtworksTool(BaseTool):
             description = description_of(match["content"])
             if description:
                 entry += f"\n  About: {description[:300]}" + ("..." if len(description) > 300 else "")
+            looks = visual_notes_of(match["content"])
+            if looks:
+                entry += f"\n  Looks: {looks}"
             output_lines.append(entry)
 
         return "Found these artworks:\n\n" + "\n\n".join(output_lines)

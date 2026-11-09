@@ -12,6 +12,7 @@ startup and by the /reindex endpoint) and tools/filter_by_series.py
 has no metadata for them yet).
 """
 
+import json
 import re
 from pathlib import Path
 from urllib.parse import unquote
@@ -91,6 +92,30 @@ def get_artwork_series(html_path) -> str:
     """Look up which series an artwork belongs to, based on its filename."""
     filename = Path(html_path).name.lower()
     return _ARTWORK_TO_SERIES.get(filename, "")
+
+
+# --- visual notes (bot-only) ----------------------------------------------
+
+# What each artwork looks like - colours, subject, and facts about public
+# subjects - keyed by page filename. Lives in backend/, which Netlify never
+# publishes, so it's indexed for the chatbot but never shown on the site.
+# Without it, colour searches ("something purple") had nothing to match:
+# colour exists only in the images, which the text reranker can't see.
+_VISUAL_NOTES_PATH = Path(__file__).parent / "visual_notes.json"
+_VISUAL_NOTES = {
+    name.lower(): note
+    for name, note in json.loads(_VISUAL_NOTES_PATH.read_text(encoding="utf-8")).items()
+    if not name.startswith("_")
+}
+
+
+def visual_notes_for(html_path) -> str:
+    """This artwork's visual notes as one line, or "" if it has none."""
+    note = _VISUAL_NOTES.get(Path(html_path).name.lower(), {})
+    parts = [f"{label}: {note[key]}." for key, label in
+             (("colours", "Colours"), ("shows", "Shows"), ("about", "About"))
+             if note.get(key)]
+    return "Visual notes: " + " ".join(parts) if parts else ""
 
 
 # --- secret/hidden artworks ------------------------------------------------
@@ -205,6 +230,9 @@ URL: {url}
 
 {description}
         """.strip()
+        notes = visual_notes_for(html_path)
+        if notes:
+            full_content += f"\n\n{notes}"
 
         return {
             "title": title,

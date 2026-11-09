@@ -56,6 +56,8 @@ def test_react_node_forces_final_answer_when_loop_never_breaks(monkeypatch):
     # reject setting arbitrary attributes like `.invoke` in place, so
     # replace the whole attribute with a mock instead of patching a method
     # on the real object.
+    agent._llm_must_use_tool = MagicMock()
+    agent._llm_must_use_tool.invoke.return_value = _ai_with_tool_call()
     agent._llm_with_tools = MagicMock()
     agent._llm_with_tools.invoke.return_value = _ai_with_tool_call()
     agent._tool_node = MagicMock()
@@ -67,8 +69,9 @@ def test_react_node_forces_final_answer_when_loop_never_breaks(monkeypatch):
     state = {"messages": [HumanMessage(content="tell me everything")], "user_prefs": {}}
     result = agent.react_node(state)
 
-    # The tool-bound LLM was called exactly 5 times (the loop cap).
-    assert agent._llm_with_tools.invoke.call_count == 5
+    # 5 tool-bound calls in total (the loop cap): the forced first step + 4.
+    assert agent._llm_must_use_tool.invoke.call_count == 1
+    assert agent._llm_with_tools.invoke.call_count == 4
     # The fallback untooled call fired exactly once.
     agent._llm_main.invoke.assert_called_once()
     # The very last message is the forced final answer, not a tool result.
@@ -80,18 +83,47 @@ def test_react_node_does_not_force_extra_call_when_model_answers_normally(monkey
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     agent = PaintboxAgent()
 
+    tool_call = _ai_with_tool_call()
+    tool_result = AIMessage(content="[tool result]")
     normal_answer = AIMessage(content="Icarus is a mythical-series piece about ambition.")
+    agent._llm_must_use_tool = MagicMock()
+    agent._llm_must_use_tool.invoke.return_value = tool_call
     agent._llm_with_tools = MagicMock()
     agent._llm_with_tools.invoke.return_value = normal_answer
     agent._tool_node = MagicMock()
+    agent._tool_node.invoke.return_value = {"messages": [tool_result]}
     agent._llm_main = MagicMock()
 
     state = {"messages": [HumanMessage(content="tell me about Icarus")], "user_prefs": {}}
     result = agent.react_node(state)
 
     assert agent._llm_with_tools.invoke.call_count == 1
-    agent._llm_main.invoke.assert_not_called()  # the fix's fallback never fires
-    assert result["messages"] == [normal_answer]
+    agent._llm_main.invoke.assert_not_called()  # the fallback never fires
+    assert result["messages"] == [tool_call, tool_result, normal_answer]
+
+
+def test_react_node_always_searches_before_answering(monkeypatch):
+    """Regression test (seen live): asked "show me something purple", the
+    model sometimes replied "searching for purple artworks..." without
+    calling a tool, and that empty promise was the whole reply. The first
+    step is now bound with tool_choice "any", so it must call a tool."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    agent = PaintboxAgent()
+
+    assert agent._llm_must_use_tool.kwargs["tool_choice"] == {"type": "any"}
+    assert agent._llm_with_tools.kwargs.get("tool_choice") is None  # later steps may answer
+
+    agent._llm_must_use_tool = MagicMock()
+    agent._llm_must_use_tool.invoke.return_value = _ai_with_tool_call()
+    agent._llm_with_tools = MagicMock()
+    agent._llm_with_tools.invoke.return_value = AIMessage(content="Hurt is a magenta-purple piece.")
+    agent._tool_node = MagicMock()
+    agent._tool_node.invoke.return_value = {"messages": [AIMessage(content="[tool result]")]}
+
+    agent.react_node({"messages": [HumanMessage(content="something purple")], "user_prefs": {}})
+
+    agent._llm_must_use_tool.invoke.assert_called_once()  # step 1 used the forced binding
+    agent._tool_node.invoke.assert_called_once()
 
 
 def test_extract_preferences_keeps_newest_items_when_over_cap(monkeypatch):
