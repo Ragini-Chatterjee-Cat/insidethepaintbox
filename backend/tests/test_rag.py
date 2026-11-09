@@ -60,12 +60,34 @@ def test_voyage_embed_raises_after_exhausting_retries(monkeypatch):
     assert calls["n"] == 3
 
 
+def test_embed_document_retries_long_enough_to_outlast_a_rate_limit_window(monkeypatch):
+    """Regression test: indexing used to give up on a rate-limited document
+    after ~7s of retries, while Voyage's limits reset per minute - so about
+    half the site was silently missing from the index."""
+    calls = {"n": 0}
+    delays = []
+
+    def always_limited(*_args, **_kwargs):
+        calls["n"] += 1
+        raise RateLimitError("rate limited")
+
+    monkeypatch.setattr(rag._voyage_client, "multimodal_embed", always_limited)
+    monkeypatch.setattr(rag.time, "sleep", delays.append)
+
+    with pytest.raises(RateLimitError):
+        rag.embed_document("some text")
+
+    assert calls["n"] == 8
+    assert sum(delays) > 60  # outlasts a full per-minute window
+    assert max(delays) <= 60.5  # each single wait is capped
+
+
 def test_embed_document_skips_images_that_fail_to_open(monkeypatch):
     """A missing/corrupt image shouldn't prevent the document from being
     embedded at all - it should just fall back to text-only."""
     captured = {}
 
-    def fake_embed(inputs, input_type):
+    def fake_embed(inputs, input_type, **_kwargs):
         captured["inputs"] = inputs
         return MagicMock(embeddings=[[0.5]])
 
@@ -89,7 +111,7 @@ def test_embed_document_catches_corruption_past_the_header(monkeypatch, tmp_path
 
     captured = {}
 
-    def fake_embed(inputs, input_type):
+    def fake_embed(inputs, input_type, **_kwargs):
         captured["inputs"] = inputs
         return MagicMock(embeddings=[[0.5]])
 

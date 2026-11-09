@@ -67,8 +67,9 @@ _RETRYABLE_VOYAGE_ERRORS = (
 
 def _voyage_embed(inputs: list, input_type: str, max_attempts: int = 4) -> list:
     """Call Voyage's multimodal_embed with exponential backoff + jitter on
-    transient errors (max_attempts total tries: 1s, 2s, 4s between them).
-    Non-retryable errors (auth, bad request) raise immediately."""
+    transient errors (max_attempts total tries: 1s, 2s, 4s, ... between
+    them, each wait capped at 60s). Non-retryable errors (auth, bad
+    request) raise immediately."""
     for attempt in range(1, max_attempts + 1):
         try:
             return _voyage_client.multimodal_embed(
@@ -77,7 +78,7 @@ def _voyage_embed(inputs: list, input_type: str, max_attempts: int = 4) -> list:
         except _RETRYABLE_VOYAGE_ERRORS:
             if attempt == max_attempts:
                 raise
-            delay = 2 ** (attempt - 1) + random.uniform(0, 0.5)
+            delay = min(2 ** (attempt - 1), 60) + random.uniform(0, 0.5)
             logger.warning(
                 "Voyage API call failed (attempt %d/%d), retrying in %.1fs",
                 attempt, max_attempts, delay,
@@ -102,7 +103,12 @@ def embed_document(text: str, image_paths: list[str] | None = None) -> list[floa
             content.append(img)
         except Exception:
             logger.exception("Could not open image %s; skipping it", image_path)
-    result = _voyage_embed([content], input_type="document")
+    # Indexing embeds ~48 documents back to back, which outruns Voyage's
+    # per-minute limits (3 requests/min on an account with no payment
+    # method). 8 attempts waits ~2 minutes in total (1+2+4+8+16+32+60s) -
+    # long enough for a rate-limit window to reset - instead of the ~7s
+    # the default gives, which silently dropped about half the documents.
+    result = _voyage_embed([content], input_type="document", max_attempts=8)
     return result.embeddings[0]
 
 
