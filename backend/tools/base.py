@@ -82,8 +82,20 @@ def is_overview_page(meta: dict) -> bool:
 
 def description_of(content: str) -> str:
     """The artist's own description, without the title/series/URL header
-    that document_loader.py puts in front of it."""
-    return content.split("\n\n", 1)[1] if "\n\n" in content else ""
+    that document_loader.py puts in front of it, or the visual notes after."""
+    parts = content.split("\n\n")
+    if len(parts) > 1 and not parts[1].startswith("Visual notes:"):
+        return parts[1]
+    return ""
+
+
+def visual_notes_of(content: str) -> str:
+    """The bot-only visual notes (colours, subject) from visual_notes.json,
+    or "" if this document has none."""
+    for part in content.split("\n\n"):
+        if part.startswith("Visual notes: "):
+            return part.removeprefix("Visual notes: ")
+    return ""
 
 
 def find_relevant(query: str, n_candidates: int = N_CANDIDATES, include_overviews: bool = False) -> list[dict]:

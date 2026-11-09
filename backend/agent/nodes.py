@@ -77,6 +77,11 @@ class PaintboxAgent:
         self._llm_chat       = _make_llm(512)
         self._llm_extractor  = _make_llm(512)
         self._llm_with_tools = self._llm_main.bind_tools(ARTWORK_TOOLS)
+        # First step of the artwork path: must call a tool. Left to choose,
+        # Haiku sometimes replied "searching for purple artworks..." without
+        # searching, or asked "which phoenix piece?" instead of looking it up -
+        # and either reply ended the turn with nothing found.
+        self._llm_must_use_tool = self._llm_main.bind_tools(ARTWORK_TOOLS, tool_choice="any")
         self._tool_node      = ToolNode(ARTWORK_TOOLS, handle_tool_errors=True)
 
     # -----------------------------------------------------------------------
@@ -135,8 +140,9 @@ class PaintboxAgent:
                 messages.insert(1, SystemMessage(content="User context: " + ". ".join(pref_lines)))
 
         new_messages = []
-        for _ in range(5):
-            response = self._llm_with_tools.invoke(messages + new_messages)
+        for step in range(5):
+            llm = self._llm_must_use_tool if step == 0 else self._llm_with_tools
+            response = llm.invoke(messages + new_messages)
             new_messages.append(response)
             if not getattr(response, "tool_calls", None):
                 break
