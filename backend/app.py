@@ -37,7 +37,21 @@ from agent import chat_with_memory, clear_conversation, get_conversation_history
 from document_loader import load_about_page, load_all_artworks
 from rag import get_collection_stats, index_documents
 
-limiter = Limiter(key_func=get_remote_address)
+
+def _client_ip(request: Request) -> str:
+    """The visitor's real IP, for per-visitor rate limits.
+
+    On Railway every request arrives via its edge proxy, so the socket
+    address (get_remote_address) is the proxy's - one IP shared by all
+    visitors. Railway's edge overwrites X-Forwarded-For (dropping any
+    copy the visitor sent) and puts the real client IP leftmost, so that
+    entry is trustworthy there. Locally there's no proxy and no header,
+    so this falls back to the socket address."""
+    forwarded = request.headers.get("x-forwarded-for", "")
+    return forwarded.split(",")[0].strip() or get_remote_address(request)
+
+
+limiter = Limiter(key_func=_client_ip)
 
 
 # --- startup indexing --------------------------------------------------
@@ -163,9 +177,18 @@ async def health_check():
 MAX_MESSAGE_LENGTH = 500   # chars — long prompts signal off-topic abuse
 MAX_USER_TURNS = 20  # max user messages per session
 
+# MAX_USER_TURNS is per thread_id, which the browser picks - the chat's
+# "new conversation" button (or any script) gets a fresh one at will. These
+# limits are keyed on things a visitor can't reset: their IP, and a single
+# site-wide bucket that caps the worst-case daily LLM spend. Counters live
+# in memory, so they reset whenever the app restarts or redeploys.
+PER_IP_LIMIT = "15/minute;100/day"
+GLOBAL_DAILY_LIMIT = "500/day"
+
 
 @app.post("/chat/v2", response_model=ChatResponse)
-@limiter.limit("15/minute")
+@limiter.limit(PER_IP_LIMIT)
+@limiter.limit(GLOBAL_DAILY_LIMIT, key_func=lambda: "all-visitors")
 async def chat(request: Request, body: ChatRequest):
     """Chat endpoint with persistent memory (LangGraph).
 
